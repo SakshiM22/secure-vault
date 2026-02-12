@@ -16,32 +16,35 @@ import fileRoutes from "./routes/file.routes.js";
 const app = express();
 
 /* ================================
-   🔐 TRUST PROXY
-   ================================ */
-app.set("trust proxy", true);
+   🔐 TRUST PROXY (Required for Render)
+================================ */
+app.set("trust proxy", 1);
 
 /* ================================
    🔐 SECURITY MIDDLEWARE
-   ================================ */
+================================ */
 app.use(helmet());
 app.use(morgan("dev"));
 
 /* ================================
-   🌍 CORS CONFIG
-   ================================ */
+   🌍 CORS CONFIG (IMPORTANT FIX)
+================================ */
 const allowedOrigins = [
   "http://localhost:5173",
-  process.env.FRONTEND_URL,
+  "https://secure-vault-s2pw.onrender.com", // your frontend URL
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
+
+      // allow requests with no origin (mobile apps, curl, etc.)
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.log("Blocked by CORS:", origin);
         callback(new Error("CORS not allowed"));
       }
     },
@@ -51,61 +54,76 @@ app.use(
 
 /* ================================
    📦 BODY PARSER
-   ================================ */
+================================ */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* ================================
-   🚀 ROUTES
-   ================================ */
+   🚀 API ROUTES
+================================ */
 app.use("/api/auth", authRoutes);
 app.use("/api/protected", protectedRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/files", fileRoutes);
 
 /* ================================
+   🟢 HEALTH CHECK ROUTE (IMPORTANT)
+================================ */
+app.get("/", (req, res) => {
+  res.send("Secure Vault Backend is running ✅");
+});
+
+/* ================================
    ❌ 404 HANDLER
-   ================================ */
+================================ */
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });
 });
 
 /* ================================
    🛑 GLOBAL ERROR HANDLER
-   ================================ */
+================================ */
 app.use((err, req, res, next) => {
   console.error("Global error:", err.message);
-  res.status(500).json({ message: "Internal server error" });
+  res.status(500).json({ message: err.message || "Internal server error" });
 });
 
 /* ================================
-   🔌 SOCKET.IO SETUP
-   ================================ */
+   🔌 SOCKET.IO SETUP (FIXED)
+================================ */
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
+    methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
-// Make io accessible in routes
+// make io available everywhere
 app.set("io", io);
 
 io.on("connection", (socket) => {
+
   console.log("🔌 Admin connected:", socket.id);
 
   socket.on("disconnect", () => {
     console.log("❌ Admin disconnected:", socket.id);
   });
+
 });
 
 /* ================================
-   🟢 START SERVER
-   ================================ */
+   🟢 START SERVER (FIXED FOR RENDER)
+================================ */
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () =>
-  console.log(`🚀 Backend running on http://localhost:${PORT}`)
-);
+server.listen(PORT, () => {
+
+  console.log("=================================");
+  console.log(`🚀 Secure Vault Backend running`);
+  console.log(`🌐 Port: ${PORT}`);
+  console.log("=================================");
+
+});
