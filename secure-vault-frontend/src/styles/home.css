@@ -1,0 +1,339 @@
+/* =============================
+   BACKGROUND
+============================= */
+
+.home-container {
+  min-height: 100vh;
+  background: #000000;
+  color: #e2e8f0;
+  font-family: "Segoe UI", sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated grid layer */
+.home-container::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background-image:
+    linear-gradient(rgba(0, 255, 170, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 170, 0.08) 1px, transparent 1px);
+
+  background-size: 50px 50px;
+
+  animation: gridMove 20s linear infinite;
+}
+
+/* Scanning beam effect */
+.home-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(0, 255, 170, 0.15) 50%,
+    transparent 100%
+  );
+
+  animation: scanMove 6s linear infinite;
+}
+
+/* Floating glowing particles */
+.particles {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-image:
+    radial-gradient(circle, rgba(0,255,170,0.4) 1px, transparent 1px),
+    radial-gradient(circle, rgba(0,255,170,0.3) 1px, transparent 1px);
+
+  background-size: 120px 120px, 200px 200px;
+
+  animation: particleMove 25s linear infinite;
+}
+
+/* Animations */
+
+@keyframes gridMove {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(50px);
+  }
+}
+
+@keyframes scanMove {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes particleMove {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-200px);
+  }
+}
+
+/* =============================
+   NAVBAR
+============================= */
+
+.home-navbar {
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 20px 60px;
+
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(10px);
+
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.logo {
+
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.nav-buttons {
+
+  display: flex;
+  gap: 10px;
+}
+
+.nav-btn {
+
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.nav-btn.primary {
+
+  background: #3b82f6;
+  border: none;
+}
+
+.nav-btn:hover {
+
+  opacity: 0.8;
+}
+
+
+/* =============================
+   HERO
+============================= */
+
+.hero-section {
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 80px 80px;
+}
+
+.hero-left {
+
+  max-width: 600px;
+}
+
+.hero-left h1 {
+
+  font-size: 48px;
+  margin-bottom: 20px;
+
+  background: linear-gradient(90deg,#3b82f6,#06b6d4);
+
+  /* Standard property */
+  background-clip: text;
+
+  /* Webkit compatibility */
+  -webkit-background-clip: text;
+
+  /* Make text transparent */
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+
+.hero-left p {
+
+  font-size: 18px;
+  color: #94a3b8;
+}
+
+
+.hero-buttons {
+
+  margin-top: 30px;
+  display: flex;
+  gap: 15px;
+}
+
+
+/* =============================
+   BUTTONS
+============================= */
+
+.primary-btn {
+
+  padding: 12px 24px;
+
+  background: linear-gradient(90deg,#3b82f6,#06b6d4);
+
+  border: none;
+  border-radius: 10px;
+
+  color: white;
+
+  cursor: pointer;
+
+  font-weight: bold;
+
+  transition: 0.3s;
+}
+
+.primary-btn:hover {
+
+  transform: translateY(-3px);
+}
+
+
+.secondary-btn {
+
+  padding: 12px 24px;
+
+  background: transparent;
+
+  border: 1px solid #3b82f6;
+
+  border-radius: 10px;
+
+  color: #3b82f6;
+
+  cursor: pointer;
+}
+
+
+.primary-btn.large {
+
+  font-size: 18px;
+  padding: 14px 30px;
+}
+
+
+/* =============================
+   ANIMATION
+============================= */
+
+.vault-animation {
+
+  font-size: 120px;
+
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+
+  0% { transform: translateY(0px); }
+
+  50% { transform: translateY(-15px); }
+
+  100% { transform: translateY(0px); }
+}
+
+
+/* =============================
+   FEATURES
+============================= */
+
+.features-section {
+
+  padding: 60px;
+}
+
+.features-section h2 {
+
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+
+.features-grid {
+
+  display: grid;
+
+  grid-template-columns: repeat(auto-fit,minmax(250px,1fr));
+
+  gap: 25px;
+}
+
+
+.feature-card {
+
+  background: rgba(30,41,59,0.5);
+
+  padding: 30px;
+
+  border-radius: 14px;
+
+  text-align: center;
+
+  transition: 0.3s;
+}
+
+.feature-card:hover {
+
+  transform: translateY(-5px);
+}
+
+
+.feature-icon {
+
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+
+/* =============================
+   CTA
+============================= */
+
+.cta-section {
+
+  padding: 80px;
+
+  text-align: center;
+}
+
+
+/* =============================
+   FOOTER
+============================= */
+
+.home-footer {
+
+  text-align: center;
+
+  padding: 20px;
+
+  color: #64748b;
+}

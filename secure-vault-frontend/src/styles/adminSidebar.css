@@ -1,0 +1,144 @@
+.admin-sidebar {
+  width: 260px;
+  min-height: 100vh;
+
+  background: linear-gradient(
+    180deg,
+    #020617,
+    #0f172a,
+    #020617
+  );
+
+  color: white;
+  padding: 25px 20px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+  position: relative;
+  overflow: hidden;
+
+  box-shadow: 
+    4px 0 20px rgba(0, 0, 0, 0.6),
+    inset 0 0 20px rgba(59, 130, 246, 0.05);
+}
+
+/* Animated glow border */
+.admin-sidebar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 100%;
+
+  background: linear-gradient(
+    transparent,
+    #3b82f6,
+    transparent
+  );
+
+  animation: sidebarGlow 3s linear infinite;
+}
+
+/* Soft moving background glow */
+.admin-sidebar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: radial-gradient(
+    circle at 50% 20%,
+    rgba(59, 130, 246, 0.12),
+    transparent 40%
+  );
+
+  animation: sidebarGlowMove 8s ease-in-out infinite alternate;
+}
+@keyframes sidebarGlow {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sidebarGlowMove {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(80px);
+  }
+}
+
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.admin-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.logout-btn {
+  background: #7f1d1d;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: white;
+  font-size: 12px;
+  transition: 0.2s ease;
+}
+
+.logout-btn:hover {
+  background: #991b1b;
+}
+
+.admin-user-info {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 25px;
+  font-size: 13px;
+}
+
+.admin-user-info strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-btn {
+  background: #1e293b;
+  border: none;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: white;
+  text-align: left;
+  transition: 0.2s ease;
+}
+
+.nav-btn:hover {
+  background: #334155;
+}
+
+.admin-footer {
+  font-size: 11px;
+  opacity: 0.6;
+  text-align: center;
+}

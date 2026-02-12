@@ -1,0 +1,89 @@
+/* ===== Secure Upload Page ===== */
+
+.upload-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #0f172a, #020617);
+}
+
+.upload-card {
+  width: 420px;
+  background: #020617;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  color: #e5e7eb;
+}
+
+.upload-title {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 22px;
+}
+
+.drop-zone {
+  border: 2px dashed #64748b;
+  padding: 30px;
+  text-align: center;
+  border-radius: 8px;
+  background: #020617;
+  margin-bottom: 15px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.drop-zone.active {
+  background: #1e293b;
+  border-color: #38bdf8;
+}
+
+.drop-zone input {
+  margin-top: 10px;
+}
+
+.upload-btn {
+  width: 100%;
+  padding: 10px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.upload-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.progress-wrapper {
+  margin-top: 15px;
+}
+
+.progress-bar-bg {
+  height: 8px;
+  background: #334155;
+  border-radius: 4px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #22c55e;
+  border-radius: 4px;
+  transition: width 0.2s;
+}
+
+.progress-text {
+  font-size: 12px;
+  margin-top: 5px;
+  text-align: center;
+}
+
+.upload-message {
+  margin-top: 15px;
+  text-align: center;
+  font-size: 14px;
+}

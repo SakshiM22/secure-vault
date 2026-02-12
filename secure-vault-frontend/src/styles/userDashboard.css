@@ -1,0 +1,258 @@
+/* ================================
+   MODERN SECURE VAULT THEME
+================================ */
+
+.dashboard-container {
+  min-height: 100vh;
+  padding: 60px 80px;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #e2e8f0;
+
+  background: linear-gradient(135deg, #020617, #0f172a, #020617);
+
+  position: relative;
+  overflow: hidden;
+
+  animation: fadeIn 0.5s ease;
+}
+
+/* Animated cyber grid */
+.dashboard-container::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background-image:
+    linear-gradient(rgba(59, 130, 246, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.08) 1px, transparent 1px);
+
+  background-size: 70px 70px;
+
+  animation: userGridMove 25s linear infinite;
+
+  z-index: 0;
+}
+
+/* Moving glow effect */
+.dashboard-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: radial-gradient(
+    circle at 20% 30%,
+    rgba(59, 130, 246, 0.15),
+    transparent 40%
+  );
+
+  animation: userGlowMove 10s ease-in-out infinite alternate;
+
+  z-index: 0;
+}
+@keyframes userGridMove {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(70px);
+  }
+}
+
+@keyframes userGlowMove {
+  0% {
+    transform: translateX(0) translateY(0);
+  }
+  100% {
+    transform: translateX(120px) translateY(60px);
+  }
+}
+.dashboard-container > * {
+  position: relative;
+  z-index: 1;
+}
+
+
+/* ================================
+   HEADER
+================================ */
+
+.dashboard-container h1 {
+  font-size: 30px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
+.subtitle {
+  color: #94a3b8;
+  font-size: 14px;
+  margin-bottom: 45px;
+}
+
+/* ================================
+   STATS GRID
+================================ */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 28px;
+  margin-bottom: 50px;
+}
+
+/* ================================
+   GLASS CARDS
+================================ */
+
+.card {
+  background: rgba(30, 41, 59, 0.55);
+  backdrop-filter: blur(14px);
+
+  border: 1px solid rgba(59, 130, 246, 0.15);
+
+  padding: 30px;
+  border-radius: 16px;
+
+  transition: all 0.3s ease;
+
+  box-shadow:
+    0 0 15px rgba(59, 130, 246, 0.08),
+    0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+.card h3 {
+  font-size: 13px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 15px;
+}
+
+.card p {
+  font-size: 28px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* ================================
+   ACCOUNT STATUS
+================================ */
+
+.active-status {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+/* ================================
+   ACTION BUTTONS
+================================ */
+
+.actions {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 60px;
+}
+
+.actions button {
+  padding: 12px 26px;
+  border-radius: 10px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+/* Upload button */
+.actions button:nth-child(1) {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+}
+
+.actions button:nth-child(1):hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.4);
+}
+
+/* My Files button */
+.actions button:nth-child(2) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.actions button:nth-child(2):hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Logout button */
+.logout {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.logout:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* ================================
+   RECENT ACTIVITY
+================================ */
+
+.recent-section {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 35px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.recent-section h2 {
+  font-size: 18px;
+  margin-bottom: 25px;
+}
+
+.recent-section ul {
+  list-style: none;
+  padding: 0;
+}
+
+.recent-section li {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 14px;
+  color: #cbd5e1;
+  transition: all 0.2s ease;
+}
+
+.recent-section li:hover {
+  color: #ffffff;
+  padding-left: 6px;
+}
+
+.recent-section li:last-child {
+  border-bottom: none;
+}
+
+/* ================================
+   ANIMATION
+================================ */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
