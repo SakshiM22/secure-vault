@@ -1,0 +1,76 @@
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    email VARCHAR(150) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(20) DEFAULT 'user',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE audit_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER,
+    action VARCHAR(100),
+    details TEXT,
+    ip_address VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE secure_files (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    original_name VARCHAR(255),
+    stored_name VARCHAR(255),
+    mime_type VARCHAR(100),
+    file_size BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+DELETE FROM users WHERE email = 'sakshi@gmail.com';
+
+INSERT INTO users (name, email, password, role)
+VALUES (
+  'Sakshi Admin',
+  'sakshi@gmail.com',
+  '$2b$10$/Aq75A.BANHS6dRXOEIJ2.lQQk7WhtUacytUsIVYIfyUWxqSCxGu6',
+  'admin'
+);
+
+SELECT email, password, role
+FROM users
+WHERE email = 'sakshi@gmail.com';
+
+DROP TABLE IF EXISTS audit_logs;
+
+CREATE TABLE audit_logs (
+    id SERIAL PRIMARY KEY,
+    user_email TEXT,
+    action TEXT,
+    status TEXT,
+    ip_address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE users
+ADD COLUMN failed_attempts INTEGER DEFAULT 0;
+
+ALTER TABLE users
+ADD COLUMN is_locked BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE users
+ADD COLUMN lock_time TIMESTAMP;
+
+ALTER TABLE users
+ADD COLUMN token_version INTEGER DEFAULT 0;
+
+SELECT column_name
+FROM information_schema.columns
+WHERE table_name = 'users';
+
+
+ALTER TABLE users
+DROP COLUMN IF EXISTS name;
+
+select * from users;
+
+
