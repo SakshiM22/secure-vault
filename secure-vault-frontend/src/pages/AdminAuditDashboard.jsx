@@ -4,7 +4,7 @@ import AdminSidebar from "../components/admin/AdminSidebar";
 import { io } from "socket.io-client";
 import "../styles/adminDashboard.css";
 
-const socket = io("import.meta.env.VITE_API_URL", {
+const socket = io(import.meta.env.VITE_API_URL, {
   withCredentials: true,
 });
 
