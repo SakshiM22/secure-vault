@@ -19,6 +19,7 @@ export function AuthProvider({ children }) {
           setUser({
             id: decoded.id,
             role: decoded.role,
+             email: decoded.email,
           });
         } else {
           localStorage.removeItem("token");
@@ -38,6 +39,7 @@ export function AuthProvider({ children }) {
     setUser({
       id: userData.id,
       role: userData.role,
+      email: userData.email,
     });
   };
 
