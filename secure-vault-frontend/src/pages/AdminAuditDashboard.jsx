@@ -212,9 +212,9 @@ const deleteUser = async (id) => {
                       </button>
                     )}
 
-                    <button onClick={() => forceLogout(user.id)}>
+                    {/* <button onClick={() => forceLogout(user.id)}>
                       Force Logout
-                    </button>
+                    </button> */}
 
                     <button
                       className="danger-btn"
