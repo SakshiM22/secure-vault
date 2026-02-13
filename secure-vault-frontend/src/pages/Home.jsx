@@ -2,32 +2,42 @@ import { useNavigate } from "react-router-dom";
 import "../styles/home.css";
 
 function Home() {
+
   const navigate = useNavigate();
 
   return (
-    <div className="home-container">
-         
-         
 
-      {/* ================= NAVBAR ================= */}
+    <div className="home-container">
+
+      {/* NAVBAR */}
       <nav className="home-navbar">
+
         <div className="logo">
           🔐 SecureVault
         </div>
 
         <div className="nav-buttons">
-          <button onClick={() => navigate("/login")} className="nav-btn">
+
+          <button
+            className="nav-btn"
+            onClick={() => navigate("/login")}
+          >
             Login
           </button>
 
-          <button onClick={() => navigate("/signup")} className="nav-btn primary">
+          <button
+            className="nav-btn primary"
+            onClick={() => navigate("/signup")}
+          >
             Get Started
           </button>
+
         </div>
+
       </nav>
 
 
-      {/* ================= HERO SECTION ================= */}
+      {/* HERO */}
       <section className="hero-section">
 
         <div className="hero-left">
@@ -42,8 +52,6 @@ function Home() {
           </p>
 
           <div className="hero-buttons">
-
-            
 
             <button
               className="primary-btn"
@@ -74,7 +82,7 @@ function Home() {
       </section>
 
 
-      {/* ================= FEATURES ================= */}
+      {/* FEATURES */}
       <section className="features-section">
 
         <h2>Security Features</h2>
@@ -110,7 +118,7 @@ function Home() {
       </section>
 
 
-      {/* ================= CTA ================= */}
+      {/* CTA */}
       <section className="cta-section">
 
         <h2>Protect Your Files Today</h2>
@@ -125,18 +133,21 @@ function Home() {
       </section>
 
 
-      {/* ================= FOOTER ================= */}
+      {/* FOOTER */}
       <footer className="home-footer">
         © 2026 SecureVault • All Rights Reserved
       </footer>
 
     </div>
   );
+
 }
 
 
 function FeatureCard({ icon, title, desc }) {
+
   return (
+
     <div className="feature-card">
 
       <div className="feature-icon">
@@ -148,7 +159,9 @@ function FeatureCard({ icon, title, desc }) {
       <p>{desc}</p>
 
     </div>
+
   );
+
 }
 
 export default Home;

@@ -9,6 +9,7 @@
   font-family: "Segoe UI", sans-serif;
   position: relative;
   overflow: hidden;
+  z-index: 1;
 }
 
 /* Animated grid layer */
@@ -22,8 +23,10 @@
     linear-gradient(90deg, rgba(0, 255, 170, 0.08) 1px, transparent 1px);
 
   background-size: 50px 50px;
-
   animation: gridMove 20s linear infinite;
+
+  pointer-events: none; /* IMPORTANT FIX */
+  z-index: 0;
 }
 
 /* Scanning beam effect */
@@ -40,13 +43,18 @@
   );
 
   animation: scanMove 6s linear infinite;
+
+  pointer-events: none; /* IMPORTANT FIX */
+  z-index: 0;
 }
 
 /* Floating glowing particles */
 .particles {
   position: absolute;
-  width: 100%;
-  height: 100%;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+
   background-image:
     radial-gradient(circle, rgba(0,255,170,0.4) 1px, transparent 1px),
     radial-gradient(circle, rgba(0,255,170,0.3) 1px, transparent 1px);
@@ -56,33 +64,23 @@
   animation: particleMove 25s linear infinite;
 }
 
-/* Animations */
+/* =============================
+   ANIMATIONS
+============================= */
 
 @keyframes gridMove {
-  0% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(50px);
-  }
+  0% { transform: translateY(0); }
+  100% { transform: translateY(50px); }
 }
 
 @keyframes scanMove {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 @keyframes particleMove {
-  0% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(-200px);
-  }
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-200px); }
 }
 
 /* =============================
@@ -90,7 +88,6 @@
 ============================= */
 
 .home-navbar {
-
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -101,22 +98,22 @@
   backdrop-filter: blur(10px);
 
   border-bottom: 1px solid rgba(255,255,255,0.05);
+
+  position: relative;
+  z-index: 2; /* IMPORTANT FIX */
 }
 
 .logo {
-
   font-size: 22px;
   font-weight: bold;
 }
 
 .nav-buttons {
-
   display: flex;
   gap: 10px;
 }
 
 .nav-btn {
-
   padding: 8px 16px;
   background: transparent;
   border: 1px solid #334155;
@@ -126,214 +123,185 @@
 }
 
 .nav-btn.primary {
-
   background: #3b82f6;
   border: none;
 }
 
 .nav-btn:hover {
-
   opacity: 0.8;
 }
 
-
 /* =============================
-   HERO
+   HERO SECTION
 ============================= */
 
 .hero-section {
-
   display: flex;
   justify-content: space-between;
   align-items: center;
 
   padding: 80px 80px;
+
+  position: relative;
+  z-index: 2; /* IMPORTANT FIX */
 }
 
 .hero-left {
-
   max-width: 600px;
+  position: relative;
+  z-index: 3;
 }
 
 .hero-left h1 {
-
   font-size: 48px;
   margin-bottom: 20px;
 
   background: linear-gradient(90deg,#3b82f6,#06b6d4);
-
-  /* Standard property */
   background-clip: text;
-
-  /* Webkit compatibility */
   -webkit-background-clip: text;
 
-  /* Make text transparent */
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
 
-
 .hero-left p {
-
   font-size: 18px;
   color: #94a3b8;
 }
 
-
 .hero-buttons {
-
   margin-top: 30px;
   display: flex;
   gap: 15px;
 }
-
 
 /* =============================
    BUTTONS
 ============================= */
 
 .primary-btn {
-
   padding: 12px 24px;
-
   background: linear-gradient(90deg,#3b82f6,#06b6d4);
 
   border: none;
   border-radius: 10px;
 
   color: white;
+  font-weight: bold;
 
   cursor: pointer;
 
-  font-weight: bold;
+  position: relative;
+  z-index: 3;
 
-  transition: 0.3s;
+  transition: all 0.3s ease;
 }
 
 .primary-btn:hover {
-
   transform: translateY(-3px);
 }
 
-
 .secondary-btn {
-
   padding: 12px 24px;
 
   background: transparent;
-
   border: 1px solid #3b82f6;
 
   border-radius: 10px;
-
   color: #3b82f6;
 
   cursor: pointer;
+
+  position: relative;
+  z-index: 3;
 }
 
-
 .primary-btn.large {
-
   font-size: 18px;
   padding: 14px 30px;
 }
 
-
 /* =============================
-   ANIMATION
+   VAULT ANIMATION
 ============================= */
 
 .vault-animation {
-
   font-size: 120px;
-
   animation: float 3s ease-in-out infinite;
+
+  pointer-events: none; /* IMPORTANT FIX */
+  z-index: 1;
 }
 
 @keyframes float {
-
   0% { transform: translateY(0px); }
-
   50% { transform: translateY(-15px); }
-
   100% { transform: translateY(0px); }
 }
 
-
 /* =============================
-   FEATURES
+   FEATURES SECTION
 ============================= */
 
 .features-section {
-
   padding: 60px;
+  position: relative;
+  z-index: 2; /* IMPORTANT FIX */
 }
 
 .features-section h2 {
-
   text-align: center;
   margin-bottom: 40px;
 }
 
-
 .features-grid {
-
   display: grid;
-
   grid-template-columns: repeat(auto-fit,minmax(250px,1fr));
-
   gap: 25px;
 }
 
-
 .feature-card {
-
   background: rgba(30,41,59,0.5);
-
   padding: 30px;
-
   border-radius: 14px;
-
   text-align: center;
 
   transition: 0.3s;
+
+  position: relative;
+  z-index: 3;
 }
 
 .feature-card:hover {
-
   transform: translateY(-5px);
 }
 
-
 .feature-icon {
-
   font-size: 40px;
   margin-bottom: 10px;
 }
 
-
 /* =============================
-   CTA
+   CTA SECTION
 ============================= */
 
 .cta-section {
-
   padding: 80px;
-
   text-align: center;
-}
 
+  position: relative;
+  z-index: 2; /* IMPORTANT FIX */
+}
 
 /* =============================
    FOOTER
 ============================= */
 
 .home-footer {
-
   text-align: center;
-
   padding: 20px;
-
   color: #64748b;
+
+  position: relative;
+  z-index: 2; /* IMPORTANT FIX */
 }
