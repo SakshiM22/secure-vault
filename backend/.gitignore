@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Environment variables (CRITICAL)
+.env
+
+# Secure vault storage (DO NOT PUSH)
+vault/
+
+# Temporary uploads
+temp/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
