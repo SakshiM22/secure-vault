@@ -7,18 +7,6 @@ import { logAuditEvent } from "../utils/auditLogger.js";
 const router = express.Router();
 
 /* =====================================================
-   HELPER: GET USER BY ID
-===================================================== */
-const getUserById = async (id) => {
-  const result = await pool.query(
-    "SELECT id, email, role, is_locked, token_version FROM users WHERE id=$1",
-    [id]
-  );
-  return result.rows[0];
-};
-
-
-/* =====================================================
    AUDIT LOGS
 ===================================================== */
 router.get(
@@ -26,16 +14,23 @@ router.get(
   verifyToken,
   allowRoles("admin"),
   async (req, res) => {
+
     try {
 
-      const logs = await pool.query(`
-        SELECT id, user_email, action, status, ip_address, created_at
+      const result = await pool.query(`
+        SELECT
+          id,
+          user_email,
+          action,
+          status,
+          ip_address,
+          created_at
         FROM audit_logs
         ORDER BY created_at DESC
         LIMIT 500
       `);
 
-      res.json(logs.rows);
+      res.json(result.rows);
 
     } catch (error) {
 
@@ -44,13 +39,14 @@ router.get(
       res.status(500).json({
         message: "Failed to fetch audit logs"
       });
+
     }
+
   }
 );
 
-
 /* =====================================================
-   SECURITY ANALYTICS (FIXED PROPERLY)
+   SECURITY ANALYTICS
 ===================================================== */
 router.get(
   "/analytics",
@@ -66,24 +62,22 @@ router.get(
         totalUploads,
         totalDownloads,
         failedLogins24h,
-        locks24h
+        locks24h,
+        malwareFiles
       ] = await Promise.all([
 
-        pool.query(`
-          SELECT COUNT(*) FROM users
-        `),
+        pool.query(`SELECT COUNT(*) FROM users`),
 
         pool.query(`
-          SELECT COUNT(*) FROM users
+          SELECT COUNT(*)
+          FROM users
           WHERE is_locked = true
         `),
 
-        /* ✅ FIX: COUNT ONLY USER FILES, NOT ADMIN */
         pool.query(`
           SELECT COUNT(*)
-          FROM secure_files sf
-          JOIN users u ON sf.user_id = u.id
-          WHERE u.role = 'user'
+          FROM secure_files
+          WHERE malware_status = 'SAFE'
         `),
 
         pool.query(`
@@ -105,6 +99,12 @@ router.get(
           FROM audit_logs
           WHERE action='account_lock'
           AND created_at >= NOW() - INTERVAL '24 hours'
+        `),
+
+        pool.query(`
+          SELECT COUNT(*)
+          FROM secure_files
+          WHERE malware_status='MALICIOUS'
         `)
 
       ]);
@@ -123,6 +123,8 @@ router.get(
 
         locks24h: Number(locks24h.rows[0].count),
 
+        malwareFiles: Number(malwareFiles.rows[0].count)
+
       });
 
     } catch (error) {
@@ -134,9 +136,50 @@ router.get(
       });
 
     }
+
   }
 );
 
+/* =====================================================
+   MALWARE FILES (FIXED)
+===================================================== */
+router.get(
+  "/malware-files",
+  verifyToken,
+  allowRoles("admin"),
+  async (req, res) => {
+
+    try {
+
+      const result = await pool.query(`
+        SELECT
+          sf.id,
+          sf.original_name,
+          sf.user_id,
+          u.email AS user_email,
+          sf.malware_status,
+          sf.malicious_count,
+          sf.created_at
+        FROM secure_files sf
+        JOIN users u ON sf.user_id = u.id
+        WHERE sf.malware_status = 'MALICIOUS'
+        ORDER BY sf.created_at DESC
+      `);
+
+      res.json(result.rows);
+
+    } catch (error) {
+
+      console.error("Malware files error:", error);
+
+      res.status(500).json({
+        message: "Failed to fetch malware files"
+      });
+
+    }
+
+  }
+);
 
 /* =====================================================
    SUSPICIOUS ACTIVITY
@@ -150,7 +193,9 @@ router.get(
     try {
 
       const failedLoginUsers = await pool.query(`
-        SELECT user_email, COUNT(*) as failed_count
+        SELECT
+          user_email,
+          COUNT(*) AS failed_count
         FROM audit_logs
         WHERE action='login'
         AND status='failed'
@@ -160,7 +205,9 @@ router.get(
       `);
 
       const suspiciousIPs = await pool.query(`
-        SELECT ip_address, COUNT(*) as attempts
+        SELECT
+          ip_address,
+          COUNT(*) AS attempts
         FROM audit_logs
         WHERE action='login'
         AND status='failed'
@@ -169,7 +216,9 @@ router.get(
       `);
 
       const recentLocks = await pool.query(`
-        SELECT user_email, created_at
+        SELECT
+          user_email,
+          created_at
         FROM audit_logs
         WHERE action='account_lock'
         ORDER BY created_at DESC
@@ -195,10 +244,11 @@ router.get(
       res.status(500).json({
         message: "Failed to fetch suspicious activity"
       });
+
     }
+
   }
 );
-
 
 /* =====================================================
    GET USERS
@@ -211,13 +261,19 @@ router.get(
 
     try {
 
-      const users = await pool.query(`
-        SELECT id, email, role, is_locked, failed_attempts, token_version
+      const result = await pool.query(`
+        SELECT
+          id,
+          email,
+          role,
+          is_locked,
+          failed_attempts,
+          token_version
         FROM users
         ORDER BY id ASC
       `);
 
-      res.json(users.rows);
+      res.json(result.rows);
 
     } catch (error) {
 
@@ -226,10 +282,11 @@ router.get(
       res.status(500).json({
         message: "Failed to fetch users"
       });
+
     }
+
   }
 );
-
 
 /* =====================================================
    LOCK USER
@@ -249,13 +306,15 @@ router.patch(
           message: "Cannot lock yourself"
         });
 
-      await pool.query(
-        "UPDATE users SET is_locked=true, lock_time=NOW() WHERE id=$1",
-        [id]
-      );
+      await pool.query(`
+        UPDATE users
+        SET is_locked=true,
+        lock_time=NOW()
+        WHERE id=$1
+      `, [id]);
 
       res.json({
-        message: "User locked successfully"
+        message: "User locked"
       });
 
     } catch (error) {
@@ -265,10 +324,11 @@ router.patch(
       res.status(500).json({
         message: "Lock failed"
       });
+
     }
+
   }
 );
-
 
 /* =====================================================
    UNLOCK USER
@@ -281,17 +341,15 @@ router.patch(
 
     try {
 
-      const id = Number(req.params.id);
-
       await pool.query(`
         UPDATE users
         SET is_locked=false,
         failed_attempts=0
         WHERE id=$1
-      `, [id]);
+      `, [req.params.id]);
 
       res.json({
-        message: "User unlocked successfully"
+        message: "User unlocked"
       });
 
     } catch (error) {
@@ -301,126 +359,14 @@ router.patch(
       res.status(500).json({
         message: "Unlock failed"
       });
+
     }
+
   }
 );
 
-
 /* =====================================================
-   PROMOTE USER
-===================================================== */
-router.patch(
-  "/users/:id/promote",
-  verifyToken,
-  allowRoles("admin"),
-  async (req, res) => {
-
-    try {
-
-      const id = Number(req.params.id);
-
-      await pool.query(
-        "UPDATE users SET role='admin' WHERE id=$1",
-        [id]
-      );
-
-      res.json({
-        message: "User promoted successfully"
-      });
-
-    } catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        message: "Promotion failed"
-      });
-    }
-  }
-);
-
-
-/* =====================================================
-   DEMOTE USER
-===================================================== */
-router.patch(
-  "/users/:id/demote",
-  verifyToken,
-  allowRoles("admin"),
-  async (req, res) => {
-
-    try {
-
-      const id = Number(req.params.id);
-
-      if (id === req.user.id)
-        return res.status(400).json({
-          message: "Cannot demote yourself"
-        });
-
-      await pool.query(
-        "UPDATE users SET role='user' WHERE id=$1",
-        [id]
-      );
-
-      res.json({
-        message: "User demoted successfully"
-      });
-
-    } catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        message: "Demotion failed"
-      });
-    }
-  }
-);
-
-
-/* =====================================================
-   FORCE LOGOUT
-===================================================== */
-router.patch(
-  "/users/:id/force-logout",
-  verifyToken,
-  allowRoles("admin"),
-  async (req, res) => {
-
-    try {
-
-      const id = Number(req.params.id);
-
-      if (id === req.user.id)
-        return res.status(400).json({
-          message: "Cannot logout yourself"
-        });
-
-      await pool.query(`
-        UPDATE users
-        SET token_version = token_version + 1
-        WHERE id=$1
-      `, [id]);
-
-      res.json({
-        message: "User session invalidated"
-      });
-
-    } catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        message: "Force logout failed"
-      });
-    }
-  }
-);
-
-
-/* =====================================================
-   DELETE USER (SAFE TRANSACTION)
+   DELETE USER
 ===================================================== */
 router.delete(
   "/users/:id",
@@ -459,7 +405,7 @@ router.delete(
       await client.query("COMMIT");
 
       res.json({
-        message: "User deleted successfully"
+        message: "User deleted"
       });
 
     } catch (error) {
@@ -477,8 +423,8 @@ router.delete(
       client.release();
 
     }
+
   }
 );
-
 
 export default router;

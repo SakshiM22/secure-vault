@@ -14,13 +14,14 @@ function AdminAuditDashboard() {
   const [analytics, setAnalytics] = useState(null);
   const [suspicious, setSuspicious] = useState(null);
   const [users, setUsers] = useState([]);
-  const [malwareFiles, setMalwareFiles] = useState([]); // NEW
+  const [malwareFiles, setMalwareFiles] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  /* ==============================
+  /* ============================
      INITIAL LOAD
-  ============================== */
+  ============================ */
 
   useEffect(() => {
 
@@ -30,8 +31,7 @@ function AdminAuditDashboard() {
 
       setLogs(prev => [newLog, ...prev]);
 
-      fetchAnalytics();
-      fetchMalwareFiles();
+      refreshDashboard();
 
     });
 
@@ -39,13 +39,15 @@ function AdminAuditDashboard() {
 
   }, []);
 
-  /* ==============================
-     FETCH ALL ADMIN DATA
-  ============================== */
+  /* ============================
+     FETCH ALL DATA
+  ============================ */
 
   const fetchAll = async () => {
 
     try {
+
+      setLoading(true);
 
       const [
         logsRes,
@@ -56,101 +58,121 @@ function AdminAuditDashboard() {
       ] = await Promise.all([
 
         api.get("/admin/audit-logs"),
+
         api.get("/admin/analytics"),
+
         api.get("/admin/suspicious-activity"),
+
         api.get("/admin/users"),
-        api.get("/admin/malware-files") // NEW
+
+        api.get("/admin/malware-files")
 
       ]);
 
-      setLogs(logsRes.data);
-      setAnalytics(analyticsRes.data);
-      setSuspicious(suspiciousRes.data);
-      setUsers(usersRes.data);
-      setMalwareFiles(malwareRes.data);
+      setLogs(logsRes.data || []);
 
-    } catch (error) {
+      setAnalytics(analyticsRes.data || null);
+
+      setSuspicious(suspiciousRes.data || null);
+
+      setUsers(usersRes.data || []);
+
+      setMalwareFiles(malwareRes.data || []);
+
+    }
+    catch (error) {
 
       console.error("Admin fetch error:", error);
 
-    } finally {
+    }
+    finally {
 
       setLoading(false);
 
     }
+
   };
 
-  const fetchAnalytics = async () => {
+  const refreshDashboard = async () => {
 
     try {
 
-      const res = await api.get("/admin/analytics");
-      setAnalytics(res.data);
+      const [analyticsRes, malwareRes] = await Promise.all([
 
-    } catch {
+        api.get("/admin/analytics"),
 
-      console.error("Analytics refresh failed");
+        api.get("/admin/malware-files")
 
-    }
-  };
+      ]);
 
-  const fetchMalwareFiles = async () => {
+      setAnalytics(analyticsRes.data);
 
-    try {
-
-      const res = await api.get("/admin/malware-files");
-
-      setMalwareFiles(res.data);
-
-    } catch {
-
-      console.error("Malware fetch failed");
+      setMalwareFiles(malwareRes.data);
 
     }
+    catch (error) {
+
+      console.error("Dashboard refresh failed:", error);
+
+    }
+
   };
 
-  /* ==============================
+  /* ============================
      USER ACTIONS
-  ============================== */
+  ============================ */
 
   const lockUser = async (id) => {
+
     await api.patch(`/admin/users/${id}/lock`);
+
     fetchAll();
+
   };
 
   const unlockUser = async (id) => {
+
     await api.patch(`/admin/users/${id}/unlock`);
-    fetchAll();
-  };
 
-  const promoteUser = async (id) => {
-    await api.patch(`/admin/users/${id}/promote`);
     fetchAll();
-  };
 
-  const demoteUser = async (id) => {
-    await api.patch(`/admin/users/${id}/demote`);
-    fetchAll();
   };
 
   const deleteUser = async (id) => {
 
-    if (!window.confirm("Delete this user permanently?"))
-      return;
+    if (!window.confirm("Delete this user permanently?")) return;
 
     await api.delete(`/admin/users/${id}`);
 
     fetchAll();
+
   };
 
-  /* ==============================
+  /* ============================
      FILTER LOGS
-  ============================== */
+  ============================ */
 
   const filteredLogs = logs.filter(log =>
+
     log.user_email?.toLowerCase().includes(search.toLowerCase()) ||
+
     log.ip_address?.includes(search)
+
   );
+
+  /* ============================
+     LOADING STATE
+  ============================ */
+
+  if (loading)
+    return (
+      <div className="admin-layout">
+        <AdminSidebar />
+        <div className="admin-content">
+          <h2>Loading Security Dashboard...</h2>
+        </div>
+      </div>
+    );
 
   return (
 
@@ -164,15 +186,18 @@ function AdminAuditDashboard() {
           🛡️ Security Control Center
         </h1>
 
-        {/* =====================
+        {/* ============================
            ANALYTICS
-        ===================== */}
+        ============================ */}
 
-        {!loading && analytics && (
+        {analytics && (
 
           <div className="analytics-grid">
 
-            <AnalyticsCard title="Total Users" value={analytics.totalUsers} />
+            <AnalyticsCard
+              title="Total Users"
+              value={analytics.totalUsers}
+            />
 
             <AnalyticsCard
               title="Locked Accounts"
@@ -186,25 +211,29 @@ function AdminAuditDashboard() {
               danger={analytics.failedLogins24h > 10}
             />
 
-            <AnalyticsCard title="Uploads" value={analytics.totalUploads} />
+            <AnalyticsCard
+              title="Total Uploads"
+              value={analytics.totalUploads}
+            />
 
-            <AnalyticsCard title="Downloads" value={analytics.totalDownloads} />
-
-            {/* NEW MALWARE CARD */}
+            <AnalyticsCard
+              title="Total Downloads"
+              value={analytics.totalDownloads}
+            />
 
             <AnalyticsCard
               title="Malware Detected Files"
-              value={malwareFiles.length}
-              danger={malwareFiles.length > 0}
+              value={analytics.malwareFiles || malwareFiles.length}
+              danger={(analytics.malwareFiles || malwareFiles.length) > 0}
             />
 
           </div>
 
         )}
 
-        {/* =====================
+        {/* ============================
            MALWARE FILES SECTION
-        ===================== */}
+        ============================ */}
 
         <h2 className="section-title">
           🦠 Malware Detected Files
@@ -219,9 +248,13 @@ function AdminAuditDashboard() {
               <tr>
 
                 <th>File Name</th>
-                <th>User ID</th>
+
+                <th>User Email</th>
+
                 <th>Malicious Engines</th>
+
                 <th>Status</th>
+
                 <th>Time</th>
 
               </tr>
@@ -233,7 +266,13 @@ function AdminAuditDashboard() {
               {malwareFiles.length === 0 ? (
 
                 <tr>
-                  <td colSpan="5">No malware detected</td>
+
+                  <td colSpan="5">
+
+                    ✅ No malware detected
+
+                  </td>
+
                 </tr>
 
               ) : (
@@ -244,18 +283,27 @@ function AdminAuditDashboard() {
 
                     <td>{file.original_name}</td>
 
-                    <td>{file.user_id}</td>
-
-                    <td>{file.malicious_count}</td>
+                    <td>{file.user_email || file.user_id}</td>
 
                     <td>
-                      <span className="danger-badge">
-                        MALICIOUS
-                      </span>
+
+                      🔴 {file.malicious_count}
+
                     </td>
 
                     <td>
-                      {new Date(file.created_at).toLocaleString()}
+
+                      <span className="danger-badge">
+                        MALICIOUS
+                      </span>
+
+                    </td>
+
+                    <td>
+
+                      {new Date(file.created_at)
+                        .toLocaleString()}
+
                     </td>
 
                   </tr>
@@ -270,9 +318,9 @@ function AdminAuditDashboard() {
 
         </div>
 
-        {/* =====================
+        {/* ============================
            USER MANAGEMENT
-        ===================== */}
+        ============================ */}
 
         <h2 className="section-title">
           👥 User Management
@@ -287,9 +335,13 @@ function AdminAuditDashboard() {
               <tr>
 
                 <th>Email</th>
+
                 <th>Role</th>
+
                 <th>Locked</th>
+
                 <th>Failed Attempts</th>
+
                 <th>Actions</th>
 
               </tr>
@@ -306,7 +358,11 @@ function AdminAuditDashboard() {
 
                   <td>{user.role}</td>
 
-                  <td>{user.is_locked ? "Yes" : "No"}</td>
+                  <td>
+
+                    {user.is_locked ? "Yes" : "No"}
+
+                  </td>
 
                   <td>{user.failed_attempts}</td>
 
@@ -314,19 +370,26 @@ function AdminAuditDashboard() {
 
                     {user.is_locked ? (
 
-                      <button onClick={() => unlockUser(user.id)}>
+                      <button
+                        onClick={() => unlockUser(user.id)}
+                      >
                         Unlock
                       </button>
 
                     ) : (
 
-                      <button onClick={() => lockUser(user.id)}>
+                      <button
+                        onClick={() => lockUser(user.id)}
+                      >
                         Lock
                       </button>
 
                     )}
 
-                    <button onClick={() => deleteUser(user.id)}>
+                    <button
+                      className="danger-btn"
+                      onClick={() => deleteUser(user.id)}
+                    >
                       Delete
                     </button>
 
@@ -342,9 +405,9 @@ function AdminAuditDashboard() {
 
         </div>
 
-        {/* =====================
+        {/* ============================
            AUDIT LOGS
-        ===================== */}
+        ============================ */}
 
         <h2 className="section-title">
           🧾 Audit Logs
@@ -352,9 +415,12 @@ function AdminAuditDashboard() {
 
         <input
           type="text"
-          placeholder="Search..."
+          placeholder="Search email or IP..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) =>
+            setSearch(e.target.value)
+          }
+          className="search-input"
         />
 
         <div className="table-wrapper">
@@ -366,9 +432,13 @@ function AdminAuditDashboard() {
               <tr>
 
                 <th>Email</th>
+
                 <th>Action</th>
+
                 <th>Status</th>
+
                 <th>IP</th>
+
                 <th>Time</th>
 
               </tr>
@@ -382,11 +452,18 @@ function AdminAuditDashboard() {
                 <tr key={log.id}>
 
                   <td>{log.user_email}</td>
+
                   <td>{log.action}</td>
+
                   <td>{log.status}</td>
+
                   <td>{log.ip_address}</td>
+
                   <td>
-                    {new Date(log.created_at).toLocaleString()}
+
+                    {new Date(log.created_at)
+                      .toLocaleString()}
+
                   </td>
 
                 </tr>
@@ -404,9 +481,12 @@ function AdminAuditDashboard() {
     </div>
 
   );
+
 }
 
-/* ===================== */
+/* ============================
+   ANALYTICS CARD
+============================ */
 
 function AnalyticsCard({ title, value, danger }) {
 
@@ -421,6 +501,7 @@ function AnalyticsCard({ title, value, danger }) {
     </div>
 
   );
+
 }
 
 export default AdminAuditDashboard;
