@@ -19,8 +19,9 @@ const router = express.Router();
 const upload = multer({
   dest: "temp/",
   limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB
-  }
+  fileSize: 32 * 1024 * 1024
+}
+
 });
 
 /* =====================================================
