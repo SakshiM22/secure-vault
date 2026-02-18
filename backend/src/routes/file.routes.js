@@ -19,13 +19,12 @@ const router = express.Router();
 const upload = multer({
   dest: "temp/",
   limits: {
-  fileSize: 32 * 1024 * 1024
-}
-
+    fileSize: 32 * 1024 * 1024 // 32MB limit
+  }
 });
 
 /* =====================================================
-   ENSURE DIRECTORIES EXIST
+   DIRECTORIES
 ===================================================== */
 
 const VAULT_DIR = "vault";
@@ -35,7 +34,8 @@ if (!fs.existsSync(VAULT_DIR)) fs.mkdirSync(VAULT_DIR);
 if (!fs.existsSync(QUARANTINE_DIR)) fs.mkdirSync(QUARANTINE_DIR);
 
 /* =====================================================
-   UPLOAD FILE (AI MALWARE SCAN + AES ENCRYPTION)
+   UPLOAD FILE
+   AI MALWARE SCAN + AES ENCRYPTION
 ===================================================== */
 
 router.post(
@@ -48,15 +48,17 @@ router.post(
 
     try {
 
-      if (req.user.role === "admin") {
+      /* ============================
+         BASIC VALIDATION
+      ============================ */
 
+      if (req.user.role === "admin") {
         return res.status(403).json({
           message: "Admins cannot upload files"
         });
       }
 
       if (!req.file) {
-
         return res.status(400).json({
           message: "No file uploaded"
         });
@@ -71,41 +73,40 @@ router.post(
 
       tempPath = uploadedTempPath;
 
-      /* =====================================================
-         STEP 1: AI MALWARE SCAN
-      ===================================================== */
+      /* ============================
+         STEP 1: MALWARE SCAN
+      ============================ */
 
       console.log("Scanning file for malware...");
 
-      const scanResult =
-        await scanFileForMalware(tempPath);
+      const scanResult = await scanFileForMalware(tempPath);
 
       console.log("Scan result:", scanResult);
 
-      /* =====================================================
-         STEP 2: HANDLE MALICIOUS FILE
-      ===================================================== */
+      /*
+         Only block if:
+         safe === false AND skipped !== true
+      */
 
-      if (!scanResult.safe) {
+      if (
+        scanResult.safe === false &&
+        scanResult.skipped !== true
+      ) {
 
         const quarantineName =
           `${Date.now()}-${originalname}`;
 
         const quarantinePath =
-          path.join(
-            QUARANTINE_DIR,
-            quarantineName
-          );
+          path.join(QUARANTINE_DIR, quarantineName);
 
         fs.renameSync(tempPath, quarantinePath);
 
         await pool.query(
-
           `INSERT INTO secure_files
-           (user_id, original_name, stored_name, mime_type,
-            file_size, malware_status, malicious_count)
+           (user_id, original_name, stored_name,
+            mime_type, file_size,
+            malware_status, malicious_count)
            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-
           [
             req.user.id,
             originalname,
@@ -118,27 +119,21 @@ router.post(
         );
 
         await logAuditEvent({
-
           userEmail: req.user.email,
           action: "malware_detected",
           status: "blocked",
           ipAddress: req.ip
-
         });
 
         return res.status(400).json({
-
           message: `Malware detected (${scanResult.maliciousCount} engines)`,
-
-          maliciousCount:
-            scanResult.maliciousCount
-
+          maliciousCount: scanResult.maliciousCount
         });
       }
 
-      /* =====================================================
-         STEP 3: AES ENCRYPT FILE
-      ===================================================== */
+      /* ============================
+         STEP 2: AES ENCRYPT FILE
+      ============================ */
 
       const storedName =
         `${Date.now()}-${originalname}`;
@@ -153,46 +148,44 @@ router.post(
 
       fs.unlinkSync(tempPath);
 
-      /* =====================================================
-         STEP 4: SAVE SAFE FILE TO DATABASE
-      ===================================================== */
+      /* ============================
+         STEP 3: SAVE DATABASE
+      ============================ */
 
       await pool.query(
-
         `INSERT INTO secure_files
          (user_id, original_name, stored_name,
-          mime_type, file_size, malware_status, malicious_count)
+          mime_type, file_size,
+          malware_status, malicious_count)
          VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-
         [
           req.user.id,
           originalname,
           storedName,
           mimetype,
           Number(size),
-          "SAFE",
+          scanResult.skipped ? "SCAN_SKIPPED" : "SAFE",
           0
         ]
       );
 
-      /* =====================================================
-         STEP 5: AUDIT LOG
-      ===================================================== */
+      /* ============================
+         STEP 4: AUDIT LOG
+      ============================ */
 
       await logAuditEvent({
-
         userEmail: req.user.email,
         action: "file_upload",
-        status: "success",
+        status: scanResult.skipped
+          ? "scan_skipped"
+          : "success",
         ipAddress: req.ip
-
       });
 
       res.json({
-
-        message:
-          "File uploaded securely (AES encrypted + malware-free)"
-
+        message: scanResult.skipped
+          ? "File uploaded securely (scan skipped, AES encrypted)"
+          : "File uploaded securely (AES encrypted + malware-free)"
       });
 
     }
@@ -200,15 +193,11 @@ router.post(
 
       console.error("Upload error:", error);
 
-      if (tempPath && fs.existsSync(tempPath)) {
-
+      if (tempPath && fs.existsSync(tempPath))
         fs.unlinkSync(tempPath);
-      }
 
       res.status(500).json({
-
         message: "Upload failed"
-
       });
     }
   }
@@ -227,7 +216,6 @@ router.get(
 
       const result =
         await pool.query(
-
           `SELECT id,
                   original_name,
                   mime_type,
@@ -238,24 +226,17 @@ router.get(
            FROM secure_files
            WHERE user_id=$1
            ORDER BY created_at DESC`,
-
           [req.user.id]
         );
 
       const files =
         result.rows.map(file => ({
-
           ...file,
-
-          file_size:
-            Number(file.file_size),
-
+          file_size: Number(file.file_size),
           malware_status:
             file.malware_status || "SAFE",
-
           malicious_count:
             file.malicious_count || 0
-
         }));
 
       res.json(files);
@@ -266,10 +247,7 @@ router.get(
       console.error(error);
 
       res.status(500).json({
-
-        message:
-          "Failed to fetch files"
-
+        message: "Failed to fetch files"
       });
     }
   }
@@ -288,64 +266,36 @@ router.get(
 
       const result =
         await pool.query(
-
           `SELECT *
            FROM secure_files
            WHERE id=$1 AND user_id=$2`,
-
-          [
-            req.params.id,
-            req.user.id
-          ]
+          [req.params.id, req.user.id]
         );
 
-      if (!result.rows.length) {
-
+      if (!result.rows.length)
         return res.status(404).json({
-
           message: "File not found"
-
         });
-      }
 
-      const file =
-        result.rows[0];
+      const file = result.rows[0];
 
-      if (
-        file.malware_status ===
-        "MALICIOUS"
-      ) {
-
+      if (file.malware_status === "MALICIOUS")
         return res.status(403).json({
-
-          message:
-            "Blocked: malware detected"
-
+          message: "Blocked: malware detected"
         });
-      }
 
       const encryptedPath =
-        path.join(
-          VAULT_DIR,
-          file.stored_name
-        );
+        path.join(VAULT_DIR, file.stored_name);
 
       const tempPath =
-        path.join(
-          os.tmpdir(),
-          file.original_name
-        );
+        path.join(os.tmpdir(), file.original_name);
 
-      await decryptFile(
-        encryptedPath,
-        tempPath
-      );
+      await decryptFile(encryptedPath, tempPath);
 
       res.download(
         tempPath,
         file.original_name,
-        () =>
-          fs.unlinkSync(tempPath)
+        () => fs.unlinkSync(tempPath)
       );
 
     }
@@ -354,10 +304,7 @@ router.get(
       console.error(error);
 
       res.status(500).json({
-
-        message:
-          "Download failed"
-
+        message: "Download failed"
       });
     }
   }
@@ -376,70 +323,39 @@ router.delete(
 
       const result =
         await pool.query(
-
           `SELECT stored_name
            FROM secure_files
            WHERE id=$1 AND user_id=$2`,
-
-          [
-            req.params.id,
-            req.user.id
-          ]
+          [req.params.id, req.user.id]
         );
 
-      if (!result.rows.length) {
-
+      if (!result.rows.length)
         return res.status(404).json({
-
           message: "File not found"
-
         });
-      }
 
       const storedName =
         result.rows[0].stored_name;
 
-      if (storedName) {
+      const vaultPath =
+        path.join(VAULT_DIR, storedName);
 
-        const vaultPath =
-          path.join(
-            VAULT_DIR,
-            storedName
-          );
+      const quarantinePath =
+        path.join(QUARANTINE_DIR, storedName);
 
-        const quarantinePath =
-          path.join(
-            QUARANTINE_DIR,
-            storedName
-          );
+      if (fs.existsSync(vaultPath))
+        fs.unlinkSync(vaultPath);
 
-        if (
-          fs.existsSync(vaultPath)
-        )
-          fs.unlinkSync(vaultPath);
-
-        if (
-          fs.existsSync(
-            quarantinePath
-          )
-        )
-          fs.unlinkSync(
-            quarantinePath
-          );
-      }
+      if (fs.existsSync(quarantinePath))
+        fs.unlinkSync(quarantinePath);
 
       await pool.query(
-
         "DELETE FROM secure_files WHERE id=$1",
-
         [req.params.id]
       );
 
       res.json({
-
-        message:
-          "File deleted securely"
-
+        message: "File deleted securely"
       });
 
     }
@@ -448,10 +364,7 @@ router.delete(
       console.error(error);
 
       res.status(500).json({
-
-        message:
-          "Delete failed"
-
+        message: "Delete failed"
       });
     }
   }

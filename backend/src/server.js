@@ -89,6 +89,26 @@ app.use((err, req, res, next) => {
 });
 
 /* ================================
+   🛑 MULTER ERROR HANDLER
+================================ */
+app.use((err, req, res, next) => {
+
+  if (err.code === "LIMIT_FILE_SIZE") {
+
+    return res.status(400).json({
+      message: "File exceeds 50MB limit"
+    });
+  }
+
+  console.error("Global error:", err.message);
+
+  res.status(500).json({
+    message: err.message
+  });
+});
+
+
+/* ================================
    🔌 SOCKET.IO SETUP (FIXED)
 ================================ */
 const server = http.createServer(app);
