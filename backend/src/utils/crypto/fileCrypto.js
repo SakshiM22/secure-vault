@@ -1,85 +1,135 @@
 import crypto from "crypto";
 import fs from "fs";
 
-const algorithm = "aes-256-cbc";
+const algorithm = "aes-256-gcm";
 
 /* ===============================
-   GET SECRET KEY SAFELY (RUNTIME)
-   =============================== */
+   GET SECRET KEY SAFELY
+=============================== */
 const getSecretKey = () => {
+
   if (!process.env.FILE_SECRET) {
+
     throw new Error(
       "FILE_SECRET is missing. Set it in backend/.env and restart server."
     );
+
   }
 
   return crypto
     .createHash("sha256")
-    .update(String(process.env.FILE_SECRET))
+    .update(process.env.FILE_SECRET)
     .digest();
 };
 
+
 /* ===============================
-   ENCRYPT FILE
-   =============================== */
+   ENCRYPT FILE (AES-256-GCM)
+=============================== */
 export const encryptFile = (inputPath, outputPath) => {
+
   return new Promise((resolve, reject) => {
+
     try {
-      const secretKey = getSecretKey();
-      const iv = crypto.randomBytes(16);
+
+      const key = getSecretKey();
+
+      const iv = crypto.randomBytes(12); // GCM standard IV size
+
       const cipher = crypto.createCipheriv(
         algorithm,
-        secretKey,
+        key,
         iv
       );
 
       const input = fs.createReadStream(inputPath);
       const output = fs.createWriteStream(outputPath);
 
-      // Store IV at beginning of file
+      // Write IV first
       output.write(iv);
 
       input
         .pipe(cipher)
-        .pipe(output)
-        .on("finish", resolve)
-        .on("error", reject);
-    } catch (err) {
-      reject(err);
+        .pipe(output);
+
+      output.on("finish", () => {
+
+        try {
+
+          const authTag = cipher.getAuthTag();
+
+          // Append auth tag at end
+          fs.appendFileSync(outputPath, authTag);
+
+          resolve();
+
+        } catch (err) {
+
+          reject(err);
+
+        }
+
+      });
+
+      output.on("error", reject);
+
     }
+    catch (err) {
+
+      reject(err);
+
+    }
+
   });
+
 };
 
-/* ===============================
-   DECRYPT FILE
-   =============================== */
-export const decryptFile = (inputPath, outputPath) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const secretKey = getSecretKey();
 
-      // Read IV (first 16 bytes)
-      const iv = Buffer.alloc(16);
-      const fd = fs.openSync(inputPath, "r");
-      fs.readSync(fd, iv, 0, 16, 0);
-      fs.closeSync(fd);
+/* ===============================
+   DECRYPT FILE (AES-256-GCM)
+=============================== */
+export const decryptFile = (inputPath, outputPath) => {
+
+  return new Promise((resolve, reject) => {
+
+    try {
+
+      const key = getSecretKey();
+
+      const fileBuffer = fs.readFileSync(inputPath);
+
+      const iv = fileBuffer.slice(0, 12);
+
+      const authTag = fileBuffer.slice(fileBuffer.length - 16);
+
+      const encryptedData =
+        fileBuffer.slice(12, fileBuffer.length - 16);
 
       const decipher = crypto.createDecipheriv(
         algorithm,
-        secretKey,
+        key,
         iv
       );
 
-      const input = fs.createReadStream(inputPath, { start: 16 });
-      const output = fs.createWriteStream(outputPath);
+      decipher.setAuthTag(authTag);
 
-      input
-        .pipe(decipher)
-        .pipe(output)
-        .on("finish", resolve)
-        .on("error", reject);
-    } catch (err) {
-      reject(err);
+      const decrypted =
+        Buffer.concat([
+          decipher.update(encryptedData),
+          decipher.final()
+        ]);
+
+      fs.writeFileSync(outputPath, decrypted);
+
+      resolve();
+
     }
+    catch (err) {
+
+      reject(err);
+
+    }
+
   });
+
 };
