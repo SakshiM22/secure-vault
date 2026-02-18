@@ -6,101 +6,155 @@ import { logAuditEvent } from "../utils/auditLogger.js";
 const MAX_ATTEMPTS = 3;
 const LOCK_TIME_MINUTES = 30;
 
-/* ===========================
-   LOGIN CONTROLLER
-   =========================== */
+
+/* =====================================================
+   LOGIN CONTROLLER (ROLE-BASED SECURE LOGIN)
+===================================================== */
+
 export const login = async (req, res) => {
-  const { email, password } = req.body;
+
+  const { email, password, role } = req.body;
   const ipAddress = req.ip;
 
   try {
-    const userRes = await pool.query(
+
+    /* ==========================================
+       FETCH USER
+    ========================================== */
+
+    const result = await pool.query(
       "SELECT * FROM users WHERE email=$1",
       [email]
     );
 
-    if (userRes.rows.length === 0) {
+    if (result.rows.length === 0) {
+
       await logAuditEvent({
         userEmail: email,
         action: "login",
-        status: "failed",
+        status: "failed_user_not_found",
         ipAddress,
       });
 
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({
+        message: "Invalid email or password"
+      });
     }
 
-    const user = userRes.rows[0];
+    const user = result.rows[0];
 
-    /* =================================================
-       🔒 ACCOUNT LOCK CHECK (ADMIN vs BRUTE FORCE)
-    ================================================== */
+
+    /* ==========================================
+       ROLE VALIDATION (CRITICAL SECURITY FIX)
+    ========================================== */
+
+    if (role && user.role !== role) {
+
+      await logAuditEvent({
+        userEmail: user.email,
+        action: "login",
+        status: "failed_role_mismatch",
+        ipAddress,
+      });
+
+      return res.status(403).json({
+        message: "Access denied: incorrect role selected"
+      });
+    }
+
+
+    /* ==========================================
+       ACCOUNT LOCK CHECK
+    ========================================== */
 
     if (user.is_locked) {
 
-      // 🛑 ADMIN LOCK (no lock_time set)
-      if (user.is_locked) {
-  await logAuditEvent({
-    userEmail: user.email,
-    action: "login",
-    status: "locked",
-    ipAddress,
-  });
+      // Check if temporary lock expired
 
-  return res.status(423).json({
-    message: "Account is locked by administrator.",
-  });
-}
+      if (user.lock_time) {
 
+        const lockDuration =
+          (Date.now() - new Date(user.lock_time)) / (1000 * 60);
 
-      // ⏳ BRUTE FORCE LOCK (temporary)
-      const lockDuration =
-        (Date.now() - new Date(user.lock_time)) / (1000 * 60);
+        if (lockDuration >= LOCK_TIME_MINUTES) {
 
-      if (lockDuration < LOCK_TIME_MINUTES) {
+          // Auto unlock
+          await pool.query(
+            `UPDATE users
+             SET is_locked=false,
+                 failed_attempts=0,
+                 lock_time=NULL
+             WHERE id=$1`,
+            [user.id]
+          );
+
+        }
+        else {
+
+          await logAuditEvent({
+            userEmail: user.email,
+            action: "login",
+            status: "blocked_locked",
+            ipAddress,
+          });
+
+          return res.status(423).json({
+            message: "Account temporarily locked"
+          });
+        }
+
+      }
+      else {
+
+        // Admin lock (permanent)
+
         await logAuditEvent({
           userEmail: user.email,
           action: "login",
-          status: "locked",
+          status: "blocked_admin_lock",
           ipAddress,
         });
 
         return res.status(423).json({
-          message: "Account temporarily locked",
+          message: "Account locked by administrator"
         });
-      }
 
-      // 🔓 Auto unlock after cooldown
-      await pool.query(
-        "UPDATE users SET is_locked=false, failed_attempts=0, lock_time=NULL WHERE id=$1",
-        [user.id]
-      );
+      }
     }
 
-    /* =================================================
-       🔐 PASSWORD VALIDATION
-    ================================================== */
 
-    const validPassword = await comparePassword(password, user.password);
+    /* ==========================================
+       PASSWORD VALIDATION
+    ========================================== */
 
-    if (!validPassword) {
-      const attempts = user.failed_attempts + 1;
+    const passwordValid =
+      await comparePassword(password, user.password);
+
+    if (!passwordValid) {
+
+      const attempts =
+        user.failed_attempts + 1;
 
       if (attempts >= MAX_ATTEMPTS) {
+
         await pool.query(
-          "UPDATE users SET failed_attempts=$1, is_locked=true, lock_time=NOW() WHERE id=$2",
+          `UPDATE users
+           SET failed_attempts=$1,
+               is_locked=true,
+               lock_time=NOW()
+           WHERE id=$2`,
           [attempts, user.id]
         );
 
         await logAuditEvent({
           userEmail: user.email,
-          action: "account_lock",
+          action: "account_locked_bruteforce",
           status: "locked",
           ipAddress,
         });
 
         return res.status(423).json({
-          message: "Account temporarily locked",
+          message: "Account locked due to multiple failed attempts"
         });
       }
 
@@ -112,32 +166,43 @@ export const login = async (req, res) => {
       await logAuditEvent({
         userEmail: user.email,
         action: "login",
-        status: "failed",
+        status: "failed_wrong_password",
         ipAddress,
       });
 
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({
+        message: "Invalid email or password"
+      });
     }
 
-    /* =================================================
-       ✅ SUCCESSFUL LOGIN
-    ================================================== */
+
+    /* ==========================================
+       SUCCESS LOGIN
+    ========================================== */
 
     await pool.query(
       "UPDATE users SET failed_attempts=0 WHERE id=$1",
       [user.id]
     );
 
+
     const token = jwt.sign(
+
       {
         id: user.id,
-        role: user.role,
         email: user.email,
-        tokenVersion: user.token_version,
+        role: user.role,
+        tokenVersion: user.token_version
       },
+
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+
+      {
+        expiresIn: "1h"
+      }
+
     );
+
 
     await logAuditEvent({
       userEmail: user.email,
@@ -146,16 +211,26 @@ export const login = async (req, res) => {
       ipAddress,
     });
 
+
     return res.json({
+
+      message: "Login successful",
+
       token,
+
       user: {
+
         id: user.id,
         email: user.email,
-        role: user.role,
-      },
+        role: user.role
+
+      }
+
     });
 
-  } catch (error) {
+  }
+  catch (error) {
+
     console.error("Login error:", error);
 
     await logAuditEvent({
@@ -165,28 +240,49 @@ export const login = async (req, res) => {
       ipAddress,
     });
 
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      message: "Server error"
+    });
+
   }
+
 };
 
-/* ===========================
+
+/* =====================================================
    SIGNUP CONTROLLER
-   =========================== */
+===================================================== */
+
 export const signup = async (req, res) => {
+
   const { email, password } = req.body;
   const ipAddress = req.ip;
 
-  if (!email || !password) {
-    return res.status(400).json({ message: "Invalid input" });
-  }
-
   try {
-    const hashedPassword = await hashPassword(password);
+
+    if (!email || !password) {
+
+      return res.status(400).json({
+        message: "Email and password required"
+      });
+
+    }
+
+
+    const hashedPassword =
+      await hashPassword(password);
+
 
     await pool.query(
-      "INSERT INTO users (email, password, role) VALUES ($1, $2, 'user')",
+
+      `INSERT INTO users
+       (email, password, role)
+       VALUES ($1,$2,'user')`,
+
       [email, hashedPassword]
+
     );
+
 
     await logAuditEvent({
       userEmail: email,
@@ -195,24 +291,29 @@ export const signup = async (req, res) => {
       ipAddress,
     });
 
+
     return res.status(201).json({
-      message: "Signup successful",
+      message: "Signup successful"
     });
 
-  } catch (error) {
+  }
+  catch (error) {
+
     console.error("Signup error:", error);
 
     if (error.code === "23505") {
+
       await logAuditEvent({
         userEmail: email,
         action: "signup",
-        status: "failed",
+        status: "duplicate",
         ipAddress,
       });
 
       return res.status(409).json({
-        message: "User already exists",
+        message: "User already exists"
       });
+
     }
 
     await logAuditEvent({
@@ -223,7 +324,9 @@ export const signup = async (req, res) => {
     });
 
     return res.status(500).json({
-      message: "Server error",
+      message: "Server error"
     });
+
   }
+
 };
