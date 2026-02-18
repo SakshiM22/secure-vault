@@ -12,16 +12,18 @@ import { scanFileForMalware } from "../utils/malwareScanner.js";
 
 const router = express.Router();
 
+
 /* =====================================================
-   MULTER CONFIG
+   MULTER CONFIG (1GB LIMIT)
 ===================================================== */
 
 const upload = multer({
   dest: "temp/",
   limits: {
-    fileSize: 32 * 1024 * 1024
+    fileSize: 1024 * 1024 * 1024
   }
 });
+
 
 /* =====================================================
    DIRECTORIES SETUP
@@ -32,14 +34,19 @@ const QUARANTINE_DIR = "quarantine";
 const TEMP_DIR = "temp";
 
 [VAULT_DIR, QUARANTINE_DIR, TEMP_DIR].forEach(dir => {
+
   if (!fs.existsSync(dir)) {
+
     fs.mkdirSync(dir);
+
   }
+
 });
+
 
 /* =====================================================
    UPLOAD FILE
-   SHA256 + AI MALWARE SCAN + AES ENCRYPTION
+   SHA256 + AI SCAN + AES ENCRYPTION + QUARANTINE
 ===================================================== */
 
 router.post(
@@ -52,20 +59,20 @@ router.post(
 
     try {
 
-      /* =========================
-         VALIDATION
-      ========================= */
-
       if (req.user.role === "admin") {
+
         return res.status(403).json({
           message: "Admins cannot upload files"
         });
+
       }
 
       if (!req.file) {
+
         return res.status(400).json({
           message: "No file uploaded"
         });
+
       }
 
       const {
@@ -77,29 +84,40 @@ router.post(
 
       tempPath = uploadedTempPath;
 
-      console.log("Starting malware scan...");
-
-      /* =========================
-         STEP 1: SCAN FILE
-      ========================= */
+      console.log("Scanning file for malware...");
 
       const scanResult =
         await scanFileForMalware(tempPath);
 
       console.log("Scan result:", scanResult);
 
-      const malwareStatus =
-        scanResult.skipped
-          ? "SCAN_SKIPPED"
-          : scanResult.safe
-            ? "SAFE"
-            : "MALICIOUS";
 
-      /* =========================
-         STEP 2: HANDLE MALICIOUS FILE
-      ========================= */
+      /* =====================================================
+         DETERMINE STATUS
+      ===================================================== */
 
-      if (malwareStatus === "MALICIOUS") {
+      let malwareStatus = "SAFE";
+
+      if (!scanResult.safe) {
+
+        malwareStatus = "MALICIOUS";
+
+      }
+      else if (scanResult.skipped) {
+
+        malwareStatus = "QUARANTINED";
+
+      }
+
+
+      /* =====================================================
+         HANDLE MALICIOUS OR QUARANTINED FILE
+      ===================================================== */
+
+      if (
+        malwareStatus === "MALICIOUS" ||
+        malwareStatus === "QUARANTINED"
+      ) {
 
         const quarantineName =
           `${Date.now()}-${originalname}`;
@@ -116,49 +134,60 @@ router.post(
         );
 
         await pool.query(
+
           `INSERT INTO secure_files
-          (user_id,
-           original_name,
-           stored_name,
-           mime_type,
-           file_size,
-           malware_status,
-           malicious_count,
-           file_hash)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          (
+            user_id,
+            original_name,
+            stored_name,
+            mime_type,
+            file_size,
+            malware_status,
+            malicious_count,
+            file_hash
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+
           [
             req.user.id,
             originalname,
             quarantineName,
             mimetype,
             Number(size),
-            "MALICIOUS",
-            scanResult.maliciousCount || 1,
+            malwareStatus,
+            scanResult.maliciousCount || 0,
             scanResult.hash || null
           ]
+
         );
 
         await logAuditEvent({
+
           userEmail: req.user.email,
-          action: "malware_detected",
-          status: "blocked",
+          action: "file_quarantined",
+          status: malwareStatus.toLowerCase(),
           ipAddress: req.ip
+
         });
 
         return res.status(400).json({
+
           message:
-            `Malware detected (${scanResult.maliciousCount} engines)`,
-          engines:
-            scanResult.engines,
-          hash:
-            scanResult.hash
+            malwareStatus === "MALICIOUS"
+              ? "Malware detected. File quarantined."
+              : "File could not be scanned. Quarantined for safety.",
+
+          status: malwareStatus,
+          hash: scanResult.hash
+
         });
 
       }
 
-      /* =========================
-         STEP 3: ENCRYPT SAFE FILE
-      ========================= */
+
+      /* =====================================================
+         SAFE FILE → AES ENCRYPT AND STORE
+      ===================================================== */
 
       const storedName =
         `${Date.now()}-${originalname}`;
@@ -176,93 +205,87 @@ router.post(
 
       fs.unlinkSync(tempPath);
 
-      /* =========================
-         STEP 4: SAVE DATABASE
-      ========================= */
+
+      /* =====================================================
+         SAVE SAFE FILE IN DATABASE
+      ===================================================== */
 
       await pool.query(
+
         `INSERT INTO secure_files
-        (user_id,
-         original_name,
-         stored_name,
-         mime_type,
-         file_size,
-         malware_status,
-         malicious_count,
-         file_hash)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        (
+          user_id,
+          original_name,
+          stored_name,
+          mime_type,
+          file_size,
+          malware_status,
+          malicious_count,
+          file_hash
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+
         [
           req.user.id,
           originalname,
           storedName,
           mimetype,
           Number(size),
-          malwareStatus,
-          scanResult.maliciousCount || 0,
+          "SAFE",
+          0,
           scanResult.hash || null
         ]
+
       );
 
-      /* =========================
-         STEP 5: AUDIT LOG
-      ========================= */
+
+      /* =====================================================
+         AUDIT LOG
+      ===================================================== */
 
       await logAuditEvent({
+
         userEmail: req.user.email,
         action: "file_upload",
-        status:
-          malwareStatus === "SCAN_SKIPPED"
-            ? "scan_skipped"
-            : "success",
+        status: "success",
         ipAddress: req.ip
+
       });
 
-      /* =========================
-         SUCCESS RESPONSE
-      ========================= */
 
       res.json({
 
         message:
-          malwareStatus === "SCAN_SKIPPED"
-            ? "File uploaded (scan skipped, AES encrypted)"
-            : "File uploaded securely (AES encrypted + malware-free)",
+          "File uploaded securely (AES encrypted + malware-free)",
 
-        hash:
-          scanResult.hash,
-
-        scanMethod:
-          scanResult.method,
-
-        engines:
-          scanResult.engines || 0
+        hash: scanResult.hash,
+        scanMethod: scanResult.method
 
       });
 
     }
     catch (error) {
 
-      console.error(
-        "Upload error:",
-        error
-      );
+      console.error("Upload error:", error);
 
       if (
         tempPath &&
         fs.existsSync(tempPath)
       ) {
+
         fs.unlinkSync(tempPath);
+
       }
 
       res.status(500).json({
-        message:
-          "Upload failed"
+        message: "Upload failed"
       });
 
     }
 
   }
 );
+
 
 /* =====================================================
    GET USER FILES
@@ -277,19 +300,22 @@ router.get(
 
       const result =
         await pool.query(
+
           `SELECT
-           id,
-           original_name,
-           mime_type,
-           file_size,
-           created_at,
-           malware_status,
-           malicious_count,
-           file_hash
+            id,
+            original_name,
+            mime_type,
+            file_size,
+            created_at,
+            malware_status,
+            malicious_count,
+            file_hash
            FROM secure_files
            WHERE user_id=$1
            ORDER BY created_at DESC`,
+
           [req.user.id]
+
         );
 
       res.json(result.rows);
@@ -300,8 +326,7 @@ router.get(
       console.error(error);
 
       res.status(500).json({
-        message:
-          "Failed to fetch files"
+        message: "Failed to fetch files"
       });
 
     }
@@ -309,8 +334,9 @@ router.get(
   }
 );
 
+
 /* =====================================================
-   DOWNLOAD FILE
+   DOWNLOAD FILE (BLOCK QUARANTINED)
 ===================================================== */
 
 router.get(
@@ -322,16 +348,17 @@ router.get(
 
       const result =
         await pool.query(
+
           `SELECT *
            FROM secure_files
            WHERE id=$1 AND user_id=$2`,
-          [
-            req.params.id,
-            req.user.id
-          ]
+
+          [req.params.id, req.user.id]
+
         );
 
       if (!result.rows.length)
+
         return res.status(404).json({
           message: "File not found"
         });
@@ -340,13 +367,15 @@ router.get(
         result.rows[0];
 
       if (
-        file.malware_status ===
-        "MALICIOUS"
+        file.malware_status === "MALICIOUS" ||
+        file.malware_status === "QUARANTINED"
       ) {
+
         return res.status(403).json({
           message:
-            "Blocked: Malware detected"
+            "File blocked for security reasons"
         });
+
       }
 
       const encryptedPath =
@@ -379,14 +408,14 @@ router.get(
       console.error(error);
 
       res.status(500).json({
-        message:
-          "Download failed"
+        message: "Download failed"
       });
 
     }
 
   }
 );
+
 
 /* =====================================================
    DELETE FILE
@@ -401,34 +430,34 @@ router.delete(
 
       const result =
         await pool.query(
-          `SELECT stored_name,
-                  malware_status
+
+          `SELECT stored_name
            FROM secure_files
            WHERE id=$1 AND user_id=$2`,
-          [
-            req.params.id,
-            req.user.id
-          ]
+
+          [req.params.id, req.user.id]
+
         );
 
       if (!result.rows.length)
+
         return res.status(404).json({
           message: "File not found"
         });
 
-      const file =
-        result.rows[0];
+      const storedName =
+        result.rows[0].stored_name;
 
       const vaultPath =
         path.join(
           VAULT_DIR,
-          file.stored_name
+          storedName
         );
 
       const quarantinePath =
         path.join(
           QUARANTINE_DIR,
-          file.stored_name
+          storedName
         );
 
       if (fs.existsSync(vaultPath))
@@ -438,14 +467,12 @@ router.delete(
         fs.unlinkSync(quarantinePath);
 
       await pool.query(
-        `DELETE FROM secure_files
-         WHERE id=$1`,
+        "DELETE FROM secure_files WHERE id=$1",
         [req.params.id]
       );
 
       res.json({
-        message:
-          "File deleted securely"
+        message: "File deleted securely"
       });
 
     }
@@ -454,13 +481,13 @@ router.delete(
       console.error(error);
 
       res.status(500).json({
-        message:
-          "Delete failed"
+        message: "Delete failed"
       });
 
     }
 
   }
 );
+
 
 export default router;
