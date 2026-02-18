@@ -3,11 +3,7 @@ import pool from "../config/db.js";
 import { verifyToken } from "../middleware/auth.middleware.js";
 import { allowRoles } from "../middleware/role.middleware.js";
 
-import fs from "fs";
-import path from "path";
-
 const router = express.Router();
-
 
 /* =====================================================
    AUDIT LOGS
@@ -17,7 +13,6 @@ router.get(
   verifyToken,
   allowRoles("admin"),
   async (req, res) => {
-
     try {
 
       const result = await pool.query(`
@@ -35,8 +30,7 @@ router.get(
 
       res.json(result.rows);
 
-    }
-    catch (error) {
+    } catch (error) {
 
       console.error("Audit logs error:", error);
 
@@ -45,10 +39,8 @@ router.get(
       });
 
     }
-
   }
 );
-
 
 
 /* =====================================================
@@ -93,7 +85,6 @@ router.get(
         pool.query(`
           SELECT COUNT(*) FROM secure_files
           WHERE malware_status='SCAN_SKIPPED'
-          OR malware_status='QUARANTINED'
         `),
 
         pool.query(`
@@ -116,52 +107,27 @@ router.get(
 
       ]);
 
-
-      const safeCount =
-        Number(safeFiles.rows[0].count);
-
-      const malwareCount =
-        Number(malwareFiles.rows[0].count);
-
-      const skippedCount =
-        Number(skippedFiles.rows[0].count);
-
-
-      const totalUploads =
-        safeCount +
-        malwareCount +
-        skippedCount;
-
-
       res.json({
 
-        totalUsers:
-          Number(totalUsers.rows[0].count),
+        totalUsers: Number(totalUsers.rows[0].count),
 
-        lockedAccounts:
-          Number(lockedAccounts.rows[0].count),
+        lockedAccounts: Number(lockedAccounts.rows[0].count),
 
-        totalUploads: totalUploads,
+        safeFiles: Number(safeFiles.rows[0].count),
 
-        safeFiles: safeCount,
+        malwareFiles: Number(malwareFiles.rows[0].count),
 
-        malwareFiles: malwareCount,
+        skippedFiles: Number(skippedFiles.rows[0].count),
 
-        skippedFiles: skippedCount,
+        totalDownloads: Number(totalDownloads.rows[0].count),
 
-        totalDownloads:
-          Number(totalDownloads.rows[0].count),
+        failedLogins24h: Number(failedLogins24h.rows[0].count),
 
-        failedLogins24h:
-          Number(failedLogins24h.rows[0].count),
-
-        locks24h:
-          Number(locks24h.rows[0].count)
+        locks24h: Number(locks24h.rows[0].count)
 
       });
 
-    }
-    catch (error) {
+    } catch (error) {
 
       console.error("Analytics error:", error);
 
@@ -170,14 +136,12 @@ router.get(
       });
 
     }
-
   }
 );
 
 
-
 /* =====================================================
-   MALWARE FILES
+   MALWARE FILES LIST (FULL DETAILS)
 ===================================================== */
 router.get(
   "/malware-files",
@@ -192,7 +156,6 @@ router.get(
           sf.id,
           sf.original_name,
           sf.file_hash,
-          sf.file_size,
           sf.malicious_count,
           sf.malware_status,
           sf.created_at,
@@ -205,8 +168,7 @@ router.get(
 
       res.json(result.rows);
 
-    }
-    catch (error) {
+    } catch (error) {
 
       console.error(error);
 
@@ -215,14 +177,12 @@ router.get(
       });
 
     }
-
   }
 );
 
 
-
 /* =====================================================
-   SCAN SKIPPED / QUARANTINED FILES
+   SCAN SKIPPED FILES (IMPORTANT)
 ===================================================== */
 router.get(
   "/skipped-files",
@@ -237,21 +197,17 @@ router.get(
           sf.id,
           sf.original_name,
           sf.file_hash,
-          sf.file_size,
-          sf.malware_status,
           sf.created_at,
           u.email as user_email
         FROM secure_files sf
         JOIN users u ON sf.user_id = u.id
         WHERE sf.malware_status='SCAN_SKIPPED'
-        OR sf.malware_status='QUARANTINED'
         ORDER BY sf.created_at DESC
       `);
 
       res.json(result.rows);
 
-    }
-    catch (error) {
+    } catch (error) {
 
       console.error(error);
 
@@ -260,10 +216,8 @@ router.get(
       });
 
     }
-
   }
 );
-
 
 
 /* =====================================================
@@ -294,8 +248,7 @@ router.get(
 
       res.json(result.rows);
 
-    }
-    catch (error) {
+    } catch (error) {
 
       console.error(error);
 
@@ -304,48 +257,55 @@ router.get(
       });
 
     }
-
   }
 );
 
 
-
 /* =====================================================
-   VAULT FILES (FILESYSTEM)
+   SUSPICIOUS ACTIVITY
 ===================================================== */
 router.get(
-  "/vault-files",
+  "/suspicious-activity",
   verifyToken,
   allowRoles("admin"),
   async (req, res) => {
 
     try {
 
-      const vaultPath =
-        path.join(process.cwd(), "vault");
+      const failedLoginUsers = await pool.query(`
+        SELECT user_email, COUNT(*) as failed_count
+        FROM audit_logs
+        WHERE action='login'
+        AND status='failed'
+        GROUP BY user_email
+        HAVING COUNT(*) > 5
+      `);
 
-      if (!fs.existsSync(vaultPath))
-        return res.json([]);
+      const suspiciousIPs = await pool.query(`
+        SELECT ip_address, COUNT(*) as attempts
+        FROM audit_logs
+        WHERE action='login'
+        AND status='failed'
+        GROUP BY ip_address
+        HAVING COUNT(*) > 10
+      `);
 
-      const files =
-        fs.readdirSync(vaultPath);
+      res.json({
+        failedLoginUsers: failedLoginUsers.rows,
+        suspiciousIPs: suspiciousIPs.rows
+      });
 
-      res.json(files);
-
-    }
-    catch (error) {
+    } catch (error) {
 
       console.error(error);
 
       res.status(500).json({
-        message: "Failed to fetch vault files"
+        message: "Failed"
       });
 
     }
-
   }
 );
-
 
 
 /* =====================================================
@@ -360,20 +320,14 @@ router.get(
     try {
 
       const result = await pool.query(`
-        SELECT
-          id,
-          email,
-          role,
-          is_locked,
-          failed_attempts
+        SELECT id,email,role,is_locked,failed_attempts
         FROM users
         ORDER BY id ASC
       `);
 
       res.json(result.rows);
 
-    }
-    catch (error) {
+    } catch (error) {
 
       console.error(error);
 
@@ -382,10 +336,8 @@ router.get(
       });
 
     }
-
   }
 );
-
 
 
 /* =====================================================
@@ -397,31 +349,16 @@ router.patch(
   allowRoles("admin"),
   async (req, res) => {
 
-    try {
+    await pool.query(
+      `UPDATE users SET is_locked=true WHERE id=$1`,
+      [req.params.id]
+    );
 
-      await pool.query(
-        `UPDATE users SET is_locked=true WHERE id=$1`,
-        [req.params.id]
-      );
-
-      res.json({
-        message: "User locked"
-      });
-
-    }
-    catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        message: "Lock failed"
-      });
-
-    }
-
+    res.json({
+      message: "User locked"
+    });
   }
 );
-
 
 
 /* =====================================================
@@ -433,30 +370,32 @@ router.patch(
   allowRoles("admin"),
   async (req, res) => {
 
-    try {
+    await pool.query(
+      `UPDATE users SET is_locked=false WHERE id=$1`,
+      [req.params.id]
+    );
 
-      await pool.query(
-        `UPDATE users SET is_locked=false WHERE id=$1`,
-        [req.params.id]
-      );
-
-      res.json({
-        message: "User unlocked"
-      });
-
-    }
-    catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        message: "Unlock failed"
-      });
-
-    }
-
+    res.json({
+      message: "User unlocked"
+    });
   }
 );
+
+/* =====================================================
+  Endpoint to receive vault files for admin review
+===================================================== */
+router.get("/vault-files", verifyToken, allowRoles("admin"), async (req, res) => {
+
+  const vaultPath = path.join(process.cwd(), "vault");
+
+  if (!fs.existsSync(vaultPath))
+    return res.json([]);
+
+  const files = fs.readdirSync(vaultPath);
+
+  res.json(files);
+
+});
 
 
 
