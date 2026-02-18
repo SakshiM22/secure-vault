@@ -75,3 +75,83 @@
   margin-bottom: 10px;
 }
 
+/* =========================================
+   ROLE DROPDOWN STYLING
+========================================= */
+
+.role-select {
+
+  width: 100%;
+  padding: 12px 14px;
+
+  margin-top: 6px;
+  margin-bottom: 16px;
+
+  border: 1px solid #334155;
+  border-radius: 8px;
+
+  background-color: #0f172a;
+  color: #e2e8f0;
+
+  font-size: 14px;
+  font-weight: 500;
+
+  outline: none;
+  cursor: pointer;
+
+  transition: all 0.25s ease;
+
+}
+
+
+/* Hover effect */
+
+.role-select:hover {
+
+  border-color: #3b82f6;
+  background-color: #020617;
+
+}
+
+
+/* Focus effect */
+
+.role-select:focus {
+
+  border-color: #2563eb;
+
+  box-shadow:
+    0 0 0 2px rgba(37, 99, 235, 0.25);
+
+}
+
+
+/* Dropdown options */
+
+.role-select option {
+
+  background-color: #020617;
+  color: #e2e8f0;
+
+  padding: 10px;
+
+}
+
+
+/* Label styling for consistency */
+
+.auth-box label {
+
+  display: block;
+
+  margin-top: 12px;
+  margin-bottom: 4px;
+
+  font-size: 13px;
+  font-weight: 500;
+
+  color: #94a3b8;
+
+}
+
+
