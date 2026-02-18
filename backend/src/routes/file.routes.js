@@ -14,19 +14,19 @@ const router = express.Router();
 
 
 /* =====================================================
-   MULTER CONFIG (1GB LIMIT)
+   MULTER CONFIG (1GB SUPPORT)
 ===================================================== */
 
 const upload = multer({
   dest: "temp/",
   limits: {
-    fileSize: 1024 * 1024 * 1024
+    fileSize: 1024 * 1024 * 1024 // 1GB
   }
 });
 
 
 /* =====================================================
-   DIRECTORIES SETUP
+   DIRECTORY SETUP
 ===================================================== */
 
 const VAULT_DIR = "vault";
@@ -34,19 +34,16 @@ const QUARANTINE_DIR = "quarantine";
 const TEMP_DIR = "temp";
 
 [VAULT_DIR, QUARANTINE_DIR, TEMP_DIR].forEach(dir => {
-
   if (!fs.existsSync(dir)) {
-
     fs.mkdirSync(dir);
-
   }
-
 });
 
 
 /* =====================================================
    UPLOAD FILE
-   SHA256 + AI SCAN + AES ENCRYPTION + QUARANTINE
+   Enterprise workflow:
+   SHA256 → Hash check → Scan → Encrypt OR Quarantine
 ===================================================== */
 
 router.post(
@@ -59,21 +56,16 @@ router.post(
 
     try {
 
-      if (req.user.role === "admin") {
-
-        return res.status(403).json({
-          message: "Admins cannot upload files"
-        });
-
-      }
-
-      if (!req.file) {
-
+      if (!req.file)
         return res.status(400).json({
           message: "No file uploaded"
         });
 
-      }
+      if (req.user.role === "admin")
+        return res.status(403).json({
+          message: "Admins cannot upload files"
+        });
+
 
       const {
         originalname,
@@ -84,7 +76,16 @@ router.post(
 
       tempPath = uploadedTempPath;
 
-      console.log("Scanning file for malware...");
+      console.log("=================================");
+      console.log("Starting malware scan...");
+      console.log("File:", originalname);
+      console.log("Size:", size);
+      console.log("=================================");
+
+
+      /* =====================================================
+         STEP 1: MALWARE SCAN
+      ===================================================== */
 
       const scanResult =
         await scanFileForMalware(tempPath);
@@ -93,31 +94,36 @@ router.post(
 
 
       /* =====================================================
-         DETERMINE STATUS
+         STEP 2: DETERMINE FINAL STATUS
       ===================================================== */
 
-      let malwareStatus = "SAFE";
+      let malwareStatus;
+      let shouldQuarantine = false;
 
-      if (!scanResult.safe) {
+      if (scanResult.safe === false) {
 
         malwareStatus = "MALICIOUS";
+        shouldQuarantine = true;
 
       }
-      else if (scanResult.skipped) {
+      else if (scanResult.skipped === true) {
 
-        malwareStatus = "QUARANTINED";
+        malwareStatus = "UNSCANNED";
+        shouldQuarantine = true;
+
+      }
+      else {
+
+        malwareStatus = "SAFE";
 
       }
 
 
       /* =====================================================
-         HANDLE MALICIOUS OR QUARANTINED FILE
+         STEP 3: QUARANTINE MALICIOUS OR UNSCANNED FILE
       ===================================================== */
 
-      if (
-        malwareStatus === "MALICIOUS" ||
-        malwareStatus === "QUARANTINED"
-      ) {
+      if (shouldQuarantine) {
 
         const quarantineName =
           `${Date.now()}-${originalname}`;
@@ -161,24 +167,35 @@ router.post(
 
         );
 
+
         await logAuditEvent({
 
           userEmail: req.user.email,
-          action: "file_quarantined",
+
+          action:
+            malwareStatus === "MALICIOUS"
+              ? "malware_detected"
+              : "file_unscanned",
+
           status: malwareStatus.toLowerCase(),
+
           ipAddress: req.ip
 
         });
+
 
         return res.status(400).json({
 
           message:
             malwareStatus === "MALICIOUS"
               ? "Malware detected. File quarantined."
-              : "File could not be scanned. Quarantined for safety.",
+              : "File not scanned. Stored in quarantine.",
 
           status: malwareStatus,
-          hash: scanResult.hash
+
+          hash: scanResult.hash,
+
+          scanMethod: scanResult.method
 
         });
 
@@ -186,7 +203,7 @@ router.post(
 
 
       /* =====================================================
-         SAFE FILE → AES ENCRYPT AND STORE
+         STEP 4: SAFE FILE → ENCRYPT AND STORE
       ===================================================== */
 
       const storedName =
@@ -207,7 +224,7 @@ router.post(
 
 
       /* =====================================================
-         SAVE SAFE FILE IN DATABASE
+         STEP 5: SAVE SAFE FILE IN DATABASE
       ===================================================== */
 
       await pool.query(
@@ -240,14 +257,17 @@ router.post(
 
 
       /* =====================================================
-         AUDIT LOG
+         STEP 6: AUDIT LOG
       ===================================================== */
 
       await logAuditEvent({
 
         userEmail: req.user.email,
+
         action: "file_upload",
+
         status: "success",
+
         ipAddress: req.ip
 
       });
@@ -256,10 +276,13 @@ router.post(
       res.json({
 
         message:
-          "File uploaded securely (AES encrypted + malware-free)",
+          "File uploaded securely (AES-256 encrypted + malware-free)",
 
         hash: scanResult.hash,
-        scanMethod: scanResult.method
+
+        scanMethod: scanResult.method,
+
+        engines: scanResult.engines || 0
 
       });
 
@@ -272,9 +295,7 @@ router.post(
         tempPath &&
         fs.existsSync(tempPath)
       ) {
-
         fs.unlinkSync(tempPath);
-
       }
 
       res.status(500).json({
@@ -287,207 +308,3 @@ router.post(
 );
 
 
-/* =====================================================
-   GET USER FILES
-===================================================== */
-
-router.get(
-  "/my-files",
-  verifyToken,
-  async (req, res) => {
-
-    try {
-
-      const result =
-        await pool.query(
-
-          `SELECT
-            id,
-            original_name,
-            mime_type,
-            file_size,
-            created_at,
-            malware_status,
-            malicious_count,
-            file_hash
-           FROM secure_files
-           WHERE user_id=$1
-           ORDER BY created_at DESC`,
-
-          [req.user.id]
-
-        );
-
-      res.json(result.rows);
-
-    }
-    catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        message: "Failed to fetch files"
-      });
-
-    }
-
-  }
-);
-
-
-/* =====================================================
-   DOWNLOAD FILE (BLOCK QUARANTINED)
-===================================================== */
-
-router.get(
-  "/download/:id",
-  verifyToken,
-  async (req, res) => {
-
-    try {
-
-      const result =
-        await pool.query(
-
-          `SELECT *
-           FROM secure_files
-           WHERE id=$1 AND user_id=$2`,
-
-          [req.params.id, req.user.id]
-
-        );
-
-      if (!result.rows.length)
-
-        return res.status(404).json({
-          message: "File not found"
-        });
-
-      const file =
-        result.rows[0];
-
-      if (
-        file.malware_status === "MALICIOUS" ||
-        file.malware_status === "QUARANTINED"
-      ) {
-
-        return res.status(403).json({
-          message:
-            "File blocked for security reasons"
-        });
-
-      }
-
-      const encryptedPath =
-        path.join(
-          VAULT_DIR,
-          file.stored_name
-        );
-
-      const tempPath =
-        path.join(
-          os.tmpdir(),
-          file.original_name
-        );
-
-      await decryptFile(
-        encryptedPath,
-        tempPath
-      );
-
-      res.download(
-        tempPath,
-        file.original_name,
-        () =>
-          fs.unlinkSync(tempPath)
-      );
-
-    }
-    catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        message: "Download failed"
-      });
-
-    }
-
-  }
-);
-
-
-/* =====================================================
-   DELETE FILE
-===================================================== */
-
-router.delete(
-  "/delete/:id",
-  verifyToken,
-  async (req, res) => {
-
-    try {
-
-      const result =
-        await pool.query(
-
-          `SELECT stored_name
-           FROM secure_files
-           WHERE id=$1 AND user_id=$2`,
-
-          [req.params.id, req.user.id]
-
-        );
-
-      if (!result.rows.length)
-
-        return res.status(404).json({
-          message: "File not found"
-        });
-
-      const storedName =
-        result.rows[0].stored_name;
-
-      const vaultPath =
-        path.join(
-          VAULT_DIR,
-          storedName
-        );
-
-      const quarantinePath =
-        path.join(
-          QUARANTINE_DIR,
-          storedName
-        );
-
-      if (fs.existsSync(vaultPath))
-        fs.unlinkSync(vaultPath);
-
-      if (fs.existsSync(quarantinePath))
-        fs.unlinkSync(quarantinePath);
-
-      await pool.query(
-        "DELETE FROM secure_files WHERE id=$1",
-        [req.params.id]
-      );
-
-      res.json({
-        message: "File deleted securely"
-      });
-
-    }
-    catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        message: "Delete failed"
-      });
-
-    }
-
-  }
-);
-
-
-export default router;

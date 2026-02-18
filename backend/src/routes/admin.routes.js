@@ -381,5 +381,22 @@ router.patch(
   }
 );
 
+/* =====================================================
+  Endpoint to receive vault files for admin review
+===================================================== */
+router.get("/vault-files", verifyToken, allowRoles("admin"), async (req, res) => {
+
+  const vaultPath = path.join(process.cwd(), "vault");
+
+  if (!fs.existsSync(vaultPath))
+    return res.json([]);
+
+  const files = fs.readdirSync(vaultPath);
+
+  res.json(files);
+
+});
+
+
 
 export default router;
