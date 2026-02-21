@@ -457,5 +457,56 @@ router.delete(
   }
 );
 
+/* =====================================================
+   GET USER FILES (FIXED)
+===================================================== */
+
+router.get(
+  "/my-files",
+  verifyToken,
+  async (req, res) => {
+
+    try {
+
+      console.log("Fetching files for user:", req.user.id);
+
+      const result =
+        await pool.query(
+
+          `SELECT
+            id,
+            original_name,
+            mime_type,
+            file_size,
+            created_at,
+            malware_status,
+            malicious_count,
+            file_hash
+           FROM secure_files
+           WHERE user_id=$1
+           ORDER BY created_at DESC`,
+
+          [req.user.id]
+
+        );
+
+      console.log("Files found:", result.rows.length);
+
+      res.json(result.rows);
+
+    }
+    catch (error) {
+
+      console.error("My-files error:", error);
+
+      res.status(500).json({
+        message: "Failed to fetch files"
+      });
+
+    }
+
+  }
+);
+
 
 export default router;
