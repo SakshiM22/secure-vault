@@ -6,6 +6,8 @@ import os from "os";
 
 import { verifyToken } from "../middleware/auth.middleware.js";
 import pool from "../config/db.js";
+import supabase from "../config/supabase.js";
+
 import { encryptFile, decryptFile } from "../utils/crypto/fileCrypto.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
 import { scanFileForMalware } from "../utils/malwareScanner.js";
@@ -14,7 +16,7 @@ const router = express.Router();
 
 
 /* =====================================================
-   MULTER CONFIG (1GB LIMIT)
+   MULTER CONFIG
 ===================================================== */
 
 const upload = multer({
@@ -26,14 +28,13 @@ const upload = multer({
 
 
 /* =====================================================
-   DIRECTORIES SETUP
+   DIRECTORIES SETUP (LOCAL TEMP + QUARANTINE ONLY)
 ===================================================== */
 
-const VAULT_DIR = "vault";
-const QUARANTINE_DIR = "quarantine";
 const TEMP_DIR = "temp";
+const QUARANTINE_DIR = "quarantine";
 
-[VAULT_DIR, QUARANTINE_DIR, TEMP_DIR].forEach(dir => {
+[TEMP_DIR, QUARANTINE_DIR].forEach(dir => {
 
   if (!fs.existsSync(dir)) {
 
@@ -45,8 +46,7 @@ const TEMP_DIR = "temp";
 
 
 /* =====================================================
-   UPLOAD FILE
-   SHA256 + AI SCAN + AES ENCRYPTION + QUARANTINE
+   UPLOAD FILE → AES ENCRYPT → SUPABASE STORAGE
 ===================================================== */
 
 router.post(
@@ -56,6 +56,7 @@ router.post(
   async (req, res) => {
 
     let tempPath = null;
+    let encryptedTempPath = null;
 
     try {
 
@@ -98,16 +99,10 @@ router.post(
 
       let malwareStatus = "SAFE";
 
-      if (!scanResult.safe) {
-
+      if (!scanResult.safe)
         malwareStatus = "MALICIOUS";
-
-      }
-      else if (scanResult.skipped) {
-
+      else if (scanResult.skipped)
         malwareStatus = "QUARANTINED";
-
-      }
 
 
       /* =====================================================
@@ -128,10 +123,7 @@ router.post(
             quarantineName
           );
 
-        fs.renameSync(
-          tempPath,
-          quarantinePath
-        );
+        fs.renameSync(tempPath, quarantinePath);
 
         await pool.query(
 
@@ -175,10 +167,9 @@ router.post(
           message:
             malwareStatus === "MALICIOUS"
               ? "Malware detected. File quarantined."
-              : "File could not be scanned. Quarantined for safety.",
+              : "File could not be scanned. Quarantined.",
 
-          status: malwareStatus,
-          hash: scanResult.hash
+          status: malwareStatus
 
         });
 
@@ -186,28 +177,50 @@ router.post(
 
 
       /* =====================================================
-         SAFE FILE → AES ENCRYPT AND STORE
+         SAFE FILE → AES ENCRYPT LOCALLY
       ===================================================== */
 
       const storedName =
         `${Date.now()}-${originalname}`;
 
-      const encryptedPath =
-        path.join(
-          VAULT_DIR,
-          storedName
-        );
+      encryptedTempPath =
+        path.join(TEMP_DIR, storedName);
 
       await encryptFile(
         tempPath,
-        encryptedPath
+        encryptedTempPath
       );
 
       fs.unlinkSync(tempPath);
 
 
       /* =====================================================
-         SAVE SAFE FILE IN DATABASE
+         UPLOAD ENCRYPTED FILE TO SUPABASE
+      ===================================================== */
+
+      const fileBuffer =
+        fs.readFileSync(encryptedTempPath);
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from("vault")
+          .upload(
+            `vault/${storedName}`,
+            fileBuffer,
+            {
+              contentType:
+                "application/octet-stream"
+            }
+          );
+
+      if (uploadError)
+        throw uploadError;
+
+      fs.unlinkSync(encryptedTempPath);
+
+
+      /* =====================================================
+         SAVE IN DATABASE
       ===================================================== */
 
       await pool.query(
@@ -239,10 +252,6 @@ router.post(
       );
 
 
-      /* =====================================================
-         AUDIT LOG
-      ===================================================== */
-
       await logAuditEvent({
 
         userEmail: req.user.email,
@@ -256,26 +265,24 @@ router.post(
       res.json({
 
         message:
-          "File uploaded securely (AES encrypted + malware-free)",
-
-        hash: scanResult.hash,
-        scanMethod: scanResult.method
+          "File uploaded securely (AES + Supabase storage)",
+        hash: scanResult.hash
 
       });
 
     }
     catch (error) {
 
-      console.error("Upload error:", error);
+      console.error(error);
 
-      if (
-        tempPath &&
-        fs.existsSync(tempPath)
-      ) {
-
+      if (tempPath && fs.existsSync(tempPath))
         fs.unlinkSync(tempPath);
 
-      }
+      if (
+        encryptedTempPath &&
+        fs.existsSync(encryptedTempPath)
+      )
+        fs.unlinkSync(encryptedTempPath);
 
       res.status(500).json({
         message: "Upload failed"
@@ -288,55 +295,7 @@ router.post(
 
 
 /* =====================================================
-   GET USER FILES
-===================================================== */
-
-router.get(
-  "/my-files",
-  verifyToken,
-  async (req, res) => {
-
-    try {
-
-      const result =
-        await pool.query(
-
-          `SELECT
-            id,
-            original_name,
-            mime_type,
-            file_size,
-            created_at,
-            malware_status,
-            malicious_count,
-            file_hash
-           FROM secure_files
-           WHERE user_id=$1
-           ORDER BY created_at DESC`,
-
-          [req.user.id]
-
-        );
-
-      res.json(result.rows);
-
-    }
-    catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        message: "Failed to fetch files"
-      });
-
-    }
-
-  }
-);
-
-
-/* =====================================================
-   DOWNLOAD FILE (BLOCK QUARANTINED)
+   DOWNLOAD FILE FROM SUPABASE
 ===================================================== */
 
 router.get(
@@ -358,48 +317,65 @@ router.get(
         );
 
       if (!result.rows.length)
-
         return res.status(404).json({
           message: "File not found"
         });
 
-      const file =
-        result.rows[0];
+      const file = result.rows[0];
 
       if (
         file.malware_status === "MALICIOUS" ||
         file.malware_status === "QUARANTINED"
-      ) {
-
+      )
         return res.status(403).json({
-          message:
-            "File blocked for security reasons"
+          message: "File blocked"
         });
 
-      }
 
-      const encryptedPath =
+      /* DOWNLOAD ENCRYPTED FILE */
+
+      const { data, error } =
+        await supabase.storage
+          .from("vault")
+          .download(
+            `vault/${file.stored_name}`
+          );
+
+      if (error) throw error;
+
+
+      const encryptedTempPath =
         path.join(
-          VAULT_DIR,
+          os.tmpdir(),
           file.stored_name
         );
 
-      const tempPath =
+      fs.writeFileSync(
+        encryptedTempPath,
+        Buffer.from(await data.arrayBuffer())
+      );
+
+
+      const decryptedTempPath =
         path.join(
           os.tmpdir(),
           file.original_name
         );
 
       await decryptFile(
-        encryptedPath,
-        tempPath
+        encryptedTempPath,
+        decryptedTempPath
       );
 
+
+      fs.unlinkSync(encryptedTempPath);
+
+
       res.download(
-        tempPath,
+        decryptedTempPath,
         file.original_name,
         () =>
-          fs.unlinkSync(tempPath)
+          fs.unlinkSync(decryptedTempPath)
       );
 
     }
@@ -418,7 +394,7 @@ router.get(
 
 
 /* =====================================================
-   DELETE FILE
+   DELETE FILE FROM SUPABASE
 ===================================================== */
 
 router.delete(
@@ -440,39 +416,31 @@ router.delete(
         );
 
       if (!result.rows.length)
-
         return res.status(404).json({
           message: "File not found"
         });
 
+
       const storedName =
         result.rows[0].stored_name;
 
-      const vaultPath =
-        path.join(
-          VAULT_DIR,
-          storedName
-        );
 
-      const quarantinePath =
-        path.join(
-          QUARANTINE_DIR,
-          storedName
-        );
+      await supabase.storage
+        .from("vault")
+        .remove([
+          `vault/${storedName}`
+        ]);
 
-      if (fs.existsSync(vaultPath))
-        fs.unlinkSync(vaultPath);
-
-      if (fs.existsSync(quarantinePath))
-        fs.unlinkSync(quarantinePath);
 
       await pool.query(
         "DELETE FROM secure_files WHERE id=$1",
         [req.params.id]
       );
 
+
       res.json({
-        message: "File deleted securely"
+        message:
+          "File deleted securely"
       });
 
     }
