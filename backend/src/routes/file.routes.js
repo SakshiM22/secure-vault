@@ -205,7 +205,7 @@ router.post(
         await supabase.storage
           .from("vault")
           .upload(
-            `vault/${storedName}`,
+            storedName,
             fileBuffer,
             {
               contentType:
@@ -338,8 +338,8 @@ router.get(
         await supabase.storage
           .from("vault")
           .download(
-            `vault/${file.stored_name}`
-          );
+          file.stored_name
+      );
 
       if (error) throw error;
 
@@ -428,8 +428,8 @@ router.delete(
       await supabase.storage
         .from("vault")
         .remove([
-          `vault/${storedName}`
-        ]);
+          storedName
+    ]);
 
 
       await pool.query(
